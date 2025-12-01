@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: karusel_bot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./bot_database.db:/app/bot_database.db
+      - ./bot.log:/app/bot.log
+      # Mount assets if you plan to add fonts dynamically, otherwise COPY in Dockerfile is enough
+      # - ./assets:/app/assets 
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
