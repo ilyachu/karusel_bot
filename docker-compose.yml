@@ -8,9 +8,8 @@ services:
     env_file:
       - .env
     volumes:
-      - ./bot_database.db:/app/bot_database.db
-      - ./bot.log:/app/bot.log
-      # Mount assets if you plan to add fonts dynamically, otherwise COPY in Dockerfile is enough
+      - ./data:/app/data
+      # Mount assets if you plan to add fonts dynamically
       # - ./assets:/app/assets 
     logging:
       driver: "json-file"

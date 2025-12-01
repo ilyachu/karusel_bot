@@ -9,12 +9,8 @@ env/
 # Environment variables (CRITICAL)
 .env
 
-# Database
-*.db
-*.sqlite3
-
-# Logs
-*.log
+# Database and Logs
+data/
 
 # OS specific
 .DS_Store

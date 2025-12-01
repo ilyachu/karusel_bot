@@ -32,10 +32,11 @@ Upload the following files/folders to a folder on your server (e.g., `/opt/karus
 
 **Do NOT upload `.env` or `bot_database.db` if you want a fresh start, but you DO need to create a `.env` file on the server.**
 
-## Step 2.5: Prepare Database and Log Files
-Before starting Docker, create empty files to prevent Docker from creating them as directories:
+## Step 2.5: Prepare Data Directory
+Before starting Docker, create the data directory to store the database and logs:
 ```bash
-touch bot_database.db bot.log
+mkdir data
+chmod 777 data
 ```
 
 ## Step 3: Configure Environment

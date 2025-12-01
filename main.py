@@ -47,7 +47,7 @@ async def main():
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('bot.log'),
+            logging.FileHandler('data/bot.log'),
             logging.StreamHandler()
         ]
     )

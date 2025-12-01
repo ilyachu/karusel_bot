@@ -2,10 +2,14 @@ import sqlite3
 import logging
 import os
 
-DB_NAME = "bot_database.db"
+DB_FOLDER = "data"
+DB_NAME = os.path.join(DB_FOLDER, "bot_database.db")
 
 def init_db():
     """Initialize the database and create tables if they don't exist."""
+    if not os.path.exists(DB_FOLDER):
+        os.makedirs(DB_FOLDER)
+        
     if not os.path.exists(DB_NAME):
         # Create file if not exists
         open(DB_NAME, 'a').close()
