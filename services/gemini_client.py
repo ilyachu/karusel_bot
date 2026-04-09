@@ -38,6 +38,7 @@ async def analyze_text_and_propose_slides(text: str) -> dict:
     3. Первый слайд — сильный хук, но без кликбейта.
     4. Не используй общие фразы вроде "откройте мир возможностей".
     5. Не перегружай техническими деталями, если они не главные.
+    6. Не переходи на английский, кроме названий продуктов и брендов.
 
     Исходный текст:
     {text}
@@ -92,6 +93,8 @@ async def generate_final_slides(base_text: str, target_slides_count: int, rewrit
 6. Не злоупотреблять лишней технической детализацией.
 7. Не писать "подпишись", "поделись" и подобные CTA внутри обычных слайдов.
 8. Стиль: {instruction}
+9. Не переходи на английский, кроме названий продуктов и брендов.
+10. Пиши `ИИ`, а не `AI`, если это не часть официального названия.
 
 Исходный текст:
 {base_text}
@@ -130,6 +133,8 @@ async def generate_instagram_caption(base_text: str, slides_content: list[dict])
 3. Один мягкий CTA в конце.
 4. Без воды и без штампов.
 5. 4-6 релевантных хэштегов в конце.
+6. Не придумывай ссылки, `link in bio`, профиль, документацию или призывы поделиться, если этого нет в исходном тексте.
+7. Пиши `ИИ`, а не `AI`, если это не часть названия продукта.
 
 Исходный текст:
 {base_text}
@@ -184,6 +189,8 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
 4. Если это новость/инструмент, делай акцент на сути, а не на hype.
 5. Не добавляй кнопки "поделиться/подписаться" внутрь текста слайда.
 6. Выбирай `theme_hint` осознанно.
+7. Не переходи на английский, кроме названий продуктов и брендов.
+8. Пиши `ИИ`, а не `AI`, если это не часть названия продукта.
 
 Исходный текст:
 {base_text}
@@ -266,61 +273,77 @@ def _looks_english_heavy(text: str) -> bool:
 async def _normalize_analysis_language(source_text: str, result: dict) -> dict:
     if not _is_russian_source(source_text):
         return result
-    joined = " ".join(
-        f"{item.get('title', '')} {item.get('summary', '')}"
+    result["slides_plan"] = [
+        {
+            **item,
+            "title": _normalize_russian_phrase(str(item.get("title", ""))),
+            "summary": _normalize_russian_phrase(str(item.get("summary", ""))),
+        }
         for item in result.get("slides_plan", [])
-    )
-    if not _looks_english_heavy(joined):
-        return result
-    prompt = f"""Переведи и нормализуй этот JSON на русский язык. Верни только JSON.
-
-{json.dumps(result, ensure_ascii=False)}
-"""
-    normalized = await _openai_json_request(prompt)
-    return normalized if "slides_plan" in normalized else result
+    ]
+    return result
 
 
 async def _normalize_slides_language(source_text: str, slides: list[dict]) -> list[dict]:
     if not _is_russian_source(source_text):
         return slides
-    joined = " ".join(f"{slide.get('title','')} {slide.get('body','')}" for slide in slides)
-    if not _looks_english_heavy(joined):
-        return slides
-    prompt = f"""Переведи и нормализуй этот JSON со слайдами на русский язык. Верни только JSON-объект.
-
-{json.dumps({'slides': slides}, ensure_ascii=False)}
-"""
-    normalized = await _openai_json_request(prompt)
-    result = normalized.get("slides", [])
-    return result if isinstance(result, list) else slides
+    return [
+        {
+            **slide,
+            "title": _normalize_russian_phrase(str(slide.get("title", ""))),
+            "body": _normalize_russian_phrase(str(slide.get("body", ""))),
+        }
+        for slide in slides
+    ]
 
 
 async def _normalize_carousel_plan_language(source_text: str, plan: dict) -> dict:
     if not _is_russian_source(source_text):
         return plan
-    joined = " ".join(
-        f"{slide.get('title','')} {slide.get('body','')}"
+    carousel = plan.get("carousel", {})
+    if "audience" in carousel:
+        carousel["audience"] = _normalize_russian_phrase(str(carousel.get("audience", "")))
+    plan["slides"] = [
+        {
+            **slide,
+            "title": _normalize_russian_phrase(str(slide.get("title", ""))),
+            "body": _normalize_russian_phrase(str(slide.get("body", ""))),
+            "emphasis": [
+                _normalize_russian_phrase(str(item)) for item in slide.get("emphasis", [])
+            ],
+        }
         for slide in plan.get("slides", [])
-    )
-    if not _looks_english_heavy(joined):
-        return plan
-    prompt = f"""Переведи и нормализуй этот JSON-план карусели на русский язык.
-Не трогай системные поля role/theme_hint/tone/cta кроме текстовых значений title/body/emphasis/audience при необходимости.
-Верни только JSON.
-
-{json.dumps(plan, ensure_ascii=False)}
-"""
-    normalized = await _openai_json_request(prompt)
-    return normalized if "slides" in normalized else plan
+    ]
+    return plan
 
 
 async def _normalize_caption_language(source_text: str, caption: str) -> str:
     if not _is_russian_source(source_text):
         return caption
-    if not _looks_english_heavy(caption):
-        return caption
-    prompt = f"""Перепиши этот caption полностью на русском языке, коротко и естественно:
+    return _normalize_russian_phrase(caption)
 
-{caption}
-"""
-    return await _openai_text_request(prompt)
+
+def _normalize_russian_phrase(text: str) -> str:
+    replacements = {
+        "AI-ассистент": "ИИ-ассистент",
+        "AI ассистент": "ИИ-ассистент",
+        "AI assistant": "ИИ-ассистент",
+        "link in bio": "",
+        "Link in bio": "",
+        "ссылка в описании профиля": "",
+        "ссылка в профиле": "",
+        "Ссылка в профиле": "",
+        "check the link in bio": "",
+        "open source": "опенсорс",
+        "Open source": "Опенсорс",
+        "open-source": "опенсорс",
+        "Open-source": "Опенсорс",
+    }
+    normalized = text
+    for old, new in replacements.items():
+        normalized = normalized.replace(old, new)
+    normalized = re.sub(r"\bAI\b", "ИИ", normalized)
+    normalized = re.sub(r"\s{2,}", " ", normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    normalized = re.sub(r"\s+([.,!?])", r"\1", normalized)
+    return normalized.strip(" \n-")
