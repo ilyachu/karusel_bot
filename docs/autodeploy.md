@@ -1,20 +1,23 @@
 ## Autodeploy
 
-This repo now includes a GitHub Actions deploy workflow:
+Autodeploy is intentionally not shipped in the public repository.
 
-- trigger: push to `main`
-- deploy method: `rsync` project files to the server
-- restart method: `docker compose up -d --build`
+The project can be deployed with any private CI/CD setup that:
+- syncs project files to the server
+- preserves server-owned `.env`
+- preserves server-owned `data/`
+- runs `docker compose up -d --build`
 
-### Expected GitHub secrets
+### Recommended private CI secrets
 
 - `DEPLOY_SERVER_HOST`
 - `DEPLOY_SERVER_USER`
-- `DEPLOY_SERVER_PASSWORD`
+- `DEPLOY_SSH_PRIVATE_KEY`
 - `DEPLOY_SERVER_PATH`
 
 ### Notes
 
 - `.env` stays on the server and is not overwritten by deploys
 - `data/` stays on the server and is not overwritten by deploys
-- deployment is currently server-password based for speed; move to SSH key auth later if you want a cleaner setup
+- use SSH key auth for public repositories
+- do not put server passwords into public repository workflows
