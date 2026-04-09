@@ -7,7 +7,13 @@ from io import BytesIO
 from config import EXPORTS_DIR
 
 
-def build_instagram_export(slides: list[BytesIO], caption: str, source_text: str, chat_id: int) -> str:
+def build_instagram_export(
+    slides: list[BytesIO],
+    caption: str,
+    source_text: str,
+    chat_id: int,
+    extra_metadata: dict | None = None,
+) -> str:
     """
     Persist an Instagram-ready export package with slides, caption, and metadata.
     Returns the export directory path.
@@ -36,6 +42,8 @@ def build_instagram_export(slides: list[BytesIO], caption: str, source_text: str
         "caption_file": "caption.txt",
         "slides": [f"slide_{index:02d}.png" for index in range(1, len(slides) + 1)],
     }
+    if extra_metadata:
+        metadata.update(extra_metadata)
     with open(os.path.join(export_dir, "metadata.json"), "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
 

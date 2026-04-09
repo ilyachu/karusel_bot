@@ -5,6 +5,7 @@ from io import BytesIO
 
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+from services.layout_engine import LayoutSpec
 
 WIDTH = 1080
 HEIGHT = 1350
@@ -20,6 +21,13 @@ PALETTES = {
     "dela": {"accent": "#86efac", "muted": "#dcfce7", "panel": (6, 33, 27, 178)},
 }
 
+THEME_PALETTES = {
+    "business_dark": {"accent": "#38bdf8", "muted": "#dbeafe", "panel": (8, 15, 30, 178)},
+    "minimal_light": {"accent": "#0f172a", "muted": "#334155", "panel": (247, 250, 252, 218)},
+    "creator_bold": {"accent": "#f472b6", "muted": "#fae8ff", "panel": (57, 20, 59, 184)},
+    "editorial_premium": {"accent": "#f59e0b", "muted": "#fef3c7", "panel": (54, 42, 18, 184)},
+}
+
 
 @dataclass(frozen=True)
 class SlideLayout:
@@ -31,6 +39,67 @@ class SlideLayout:
     card: tuple[int, int, int, int]
     eyebrow: str
     show_progress: bool
+
+
+def render_layout_spec(spec: LayoutSpec, logo_text: str = None, bg_source=None) -> BytesIO:
+    output = BytesIO()
+    try:
+        palette = THEME_PALETTES.get(spec.theme, PALETTES.get(spec.font_style, PALETTES["standard"]))
+        base_image = _load_background(bg_source, spec.theme)
+        image = _apply_overlay(base_image, palette)
+        draw = ImageDraw.Draw(image)
+
+        title_font_path, body_font_path = _resolve_font_paths(spec.font_style)
+        layout = _build_explicit_layout(spec)
+
+        _draw_frame_chrome(draw, layout, palette, spec.slide_index, spec.total_slides)
+
+        title_font, title_lines = _fit_text_block(
+            draw,
+            text=spec.title,
+            font_path=title_font_path,
+            start_size=layout.title_size,
+            min_size=44,
+            max_width=layout.card[2] - layout.card[0] - 72,
+            max_lines=layout.title_max_lines,
+        )
+        body_font, body_lines = _fit_text_block(
+            draw,
+            text=spec.body,
+            font_path=body_font_path,
+            start_size=layout.body_size,
+            min_size=28,
+            max_width=layout.card[2] - layout.card[0] - 72,
+            max_lines=layout.body_max_lines,
+        )
+
+        _draw_layout_content(
+            draw=draw,
+            layout=layout,
+            palette=palette,
+            title_lines=title_lines,
+            body_lines=body_lines,
+            title_font=title_font,
+            body_font=body_font,
+        )
+        _draw_highlights(draw, spec, layout, palette, body_font_path)
+        _draw_logo(draw, logo_text or LOGO_TEXT, body_font_path, palette)
+
+        image.save(output, format="PNG")
+        output.seek(0)
+        return output
+    except Exception as exc:
+        logging.error("Error in render_layout_spec: %s", exc, exc_info=True)
+        return render_slide(
+            bg_source,
+            spec.title,
+            spec.body,
+            text_position=spec.text_position,
+            font_style=spec.font_style,
+            logo_text=logo_text,
+            slide_index=spec.slide_index,
+            total_slides=spec.total_slides,
+        )
 
 
 def render_slide(
@@ -105,7 +174,7 @@ def render_slide(
         return output
 
 
-def _load_background(bg_source) -> Image.Image:
+def _load_background(bg_source, theme: str | None = None) -> Image.Image:
     if isinstance(bg_source, BytesIO):
         bg_source.seek(0)
         bg_img = Image.open(bg_source).convert("RGBA")
@@ -116,7 +185,7 @@ def _load_background(bg_source) -> Image.Image:
     elif isinstance(bg_source, str) and os.path.exists(bg_source):
         bg_img = Image.open(bg_source).convert("RGBA")
     else:
-        bg_img = Image.new("RGBA", (WIDTH, HEIGHT), DEFAULT_BG)
+        bg_img = _generate_theme_background(theme or "business_dark")
     return ImageOps.fit(bg_img, (WIDTH, HEIGHT))
 
 
@@ -213,6 +282,82 @@ def _choose_layout(
         eyebrow="Deep dive",
         show_progress=progress_known,
     )
+
+
+def _build_explicit_layout(spec: LayoutSpec) -> SlideLayout:
+    if spec.variant == "cover":
+        return SlideLayout(
+            variant="cover",
+            title_size=88,
+            body_size=34,
+            title_max_lines=3,
+            body_max_lines=4,
+            card=(64, 128, WIDTH - 64, HEIGHT - 180),
+            eyebrow=spec.badge_text,
+            show_progress=spec.show_progress,
+        )
+    if spec.variant == "closing":
+        return SlideLayout(
+            variant="closing",
+            title_size=72,
+            body_size=32,
+            title_max_lines=3,
+            body_max_lines=5,
+            card=(72, 330, WIDTH - 72, HEIGHT - 220),
+            eyebrow=spec.badge_text,
+            show_progress=spec.show_progress,
+        )
+    if spec.variant == "stat_focus":
+        return SlideLayout(
+            variant="spotlight",
+            title_size=82,
+            body_size=30,
+            title_max_lines=3,
+            body_max_lines=4,
+            card=(64, 260, WIDTH - 64, HEIGHT - 210),
+            eyebrow=spec.badge_text,
+            show_progress=spec.show_progress,
+        )
+    if spec.variant == "checklist":
+        return SlideLayout(
+            variant="editorial",
+            title_size=62,
+            body_size=28,
+            title_max_lines=4,
+            body_max_lines=6,
+            card=(64, 160, WIDTH - 64, HEIGHT - 180),
+            eyebrow=spec.badge_text,
+            show_progress=spec.show_progress,
+        )
+    return _choose_layout(
+        title=spec.title,
+        body=spec.body,
+        text_position=spec.text_position,
+        slide_index=spec.slide_index,
+        total_slides=spec.total_slides,
+    )
+
+
+def _generate_theme_background(theme: str) -> Image.Image:
+    theme_bases = {
+        "business_dark": ((10, 18, 35, 255), (30, 64, 175, 180)),
+        "minimal_light": ((248, 250, 252, 255), (226, 232, 240, 200)),
+        "creator_bold": ((48, 16, 64, 255), (236, 72, 153, 170)),
+        "editorial_premium": ((36, 26, 12, 255), (217, 119, 6, 165)),
+    }
+    top, accent = theme_bases.get(theme, (DEFAULT_BG, (56, 189, 248, 160)))
+    image = Image.new("RGBA", (WIDTH, HEIGHT), top)
+    draw = ImageDraw.Draw(image)
+    for i in range(12):
+        inset = 40 + i * 35
+        alpha = max(20, accent[3] - i * 10)
+        draw.ellipse(
+            (WIDTH - inset - 380, inset, WIDTH - inset + 180, inset + 560),
+            fill=(accent[0], accent[1], accent[2], alpha),
+        )
+    for y in range(0, HEIGHT, 24):
+        draw.line((0, y, WIDTH, y), fill=(255, 255, 255, 8), width=1)
+    return image
 
 
 def _draw_frame_chrome(
@@ -390,3 +535,26 @@ def _draw_logo(draw: ImageDraw.ImageDraw, logo_text: str, font_path: str, palett
     x = WIDTH - width - PADDING_X
     y = HEIGHT - PADDING_Y + 6
     draw.text((x, y), logo_text, font=logo_font, fill=palette["muted"])
+
+
+def _draw_highlights(
+    draw: ImageDraw.ImageDraw,
+    spec: LayoutSpec,
+    layout: SlideLayout,
+    palette: dict,
+    font_path: str,
+):
+    if not spec.highlight_words:
+        return
+
+    chip_font = _load_font(font_path, 20)
+    x = layout.card[0] + 36
+    y = layout.card[3] - 86
+    for word in spec.highlight_words[:2]:
+        text = word[:28]
+        bbox = draw.textbbox((0, 0), text, font=chip_font)
+        width = bbox[2] - bbox[0]
+        chip = (x, y, x + width + 34, y + 42)
+        draw.rounded_rectangle(chip, radius=18, fill=(255, 255, 255, 24))
+        draw.text((x + 16, y + 9), text, font=chip_font, fill=palette["accent"])
+        x += width + 48

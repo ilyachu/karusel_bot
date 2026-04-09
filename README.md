@@ -42,3 +42,4 @@ Use the `🚀 Insta Auto` button in Telegram, send source text, and the bot will
 - generate an Instagram-focused carousel automatically
 - prepare a caption
 - save an export package in `EXPORTS_DIR`
+- persist the `carousel plan` and `layout specs` in `metadata.json`

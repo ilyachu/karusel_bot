@@ -5,7 +5,8 @@ from io import BytesIO
 
 from PIL import Image
 
-from services.image_renderer import HEIGHT, WIDTH, render_slide
+from services.image_renderer import HEIGHT, WIDTH, render_layout_spec, render_slide
+from services.layout_engine import build_fallback_instagram_plan, build_instagram_layout_specs
 
 
 class RenderSlideTests(unittest.TestCase):
@@ -56,6 +57,27 @@ class RenderSlideTests(unittest.TestCase):
             slide_index=1,
             total_slides=7,
         )
+        self.assert_png_dimensions(buffer)
+
+    def test_render_layout_spec_generates_png_for_instagram_auto_mode(self):
+        plan = build_fallback_instagram_plan(
+            [
+                {
+                    "title": "5 задач, которые AI закрывает каждый день",
+                    "body": "Контроль бюджета, запросы, минус-слова, тексты и ставки.",
+                },
+                {
+                    "title": "Почему это важно",
+                    "body": "Большая часть потерь в кабинете появляется из-за рутины без контроля.",
+                },
+                {
+                    "title": "Сохрани пост",
+                    "body": "И вернись к нему перед следующей оптимизацией.",
+                },
+            ]
+        )
+        spec = build_instagram_layout_specs(plan)[0]
+        buffer = render_layout_spec(spec, logo_text="chu ai", bg_source=None)
         self.assert_png_dimensions(buffer)
 
 

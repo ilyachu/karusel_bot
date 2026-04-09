@@ -11,17 +11,24 @@ from utils.validation import validate_text_length, validate_file_size
 import logging
 import os
 from io import BytesIO
+from dataclasses import asdict
 from utils.database import get_user_logo
 
 from services.gemini_client import (
     analyze_text_and_propose_slides,
     generate_final_slides,
+    generate_instagram_carousel_plan,
     generate_instagram_caption,
 )
 from services.instagram_package import build_instagram_export
+from services.layout_engine import (
+    build_fallback_instagram_plan,
+    build_instagram_layout_specs,
+    parse_carousel_plan,
+)
 from services.openai_speech import transcribe_voice
 from services.fal_client import generate_background
-from services.image_renderer import render_slide
+from services.image_renderer import render_layout_spec, render_slide
 
 router = Router()
 
@@ -158,27 +165,34 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     recommended = analysis.get("recommended_slides", 6)
     target_slides = max(5, min(7, recommended))
 
-    slides_content = await generate_final_slides(text, target_slides, "marketing")
+    raw_plan = await generate_instagram_carousel_plan(text, target_slides)
+    if raw_plan:
+        carousel_plan = parse_carousel_plan(raw_plan)
+        slides_content = [
+            {"title": slide.title, "body": slide.body}
+            for slide in carousel_plan.slides
+        ]
+    else:
+        slides_content = await generate_final_slides(text, target_slides, "marketing")
+
     if not slides_content:
         await status.edit_text("😔 Не удалось собрать тексты для карусели.")
         return
 
+    if not raw_plan:
+        carousel_plan = build_fallback_instagram_plan(slides_content)
+
     caption = await generate_instagram_caption(text, slides_content)
-    font_style = choose_insta_font(slides_content)
     user_logo = get_user_logo(message.chat.id)
+    layout_specs = build_instagram_layout_specs(carousel_plan)
 
     rendered_buffers: list[BytesIO] = []
     media_group = []
-    for index, slide in enumerate(slides_content, start=1):
-        image_buffer = render_slide(
-            None,
-            slide["title"],
-            slide["body"],
-            text_position="center",
-            font_style=font_style,
+    for layout_spec in layout_specs:
+        image_buffer = render_layout_spec(
+            layout_spec,
             logo_text=user_logo,
-            slide_index=index,
-            total_slides=len(slides_content),
+            bg_source=None,
         )
         rendered_bytes = image_buffer.getvalue()
         rendered_buffers.append(BytesIO(rendered_bytes))
@@ -186,12 +200,21 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             InputMediaPhoto(
                 media=BufferedInputFile(
                     rendered_bytes,
-                    filename=f"instagram_slide_{index}.png",
+                    filename=f"instagram_slide_{layout_spec.slide_index}.png",
                 )
             )
         )
 
-    export_dir = build_instagram_export(rendered_buffers, caption, text, message.chat.id)
+    export_dir = build_instagram_export(
+        rendered_buffers,
+        caption,
+        text,
+        message.chat.id,
+        extra_metadata={
+            "carousel_plan": asdict(carousel_plan),
+            "layout_specs": [spec.to_dict() for spec in layout_specs],
+        },
+    )
 
     await status.delete()
     await message.answer_media_group(media_group)
@@ -200,23 +223,12 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     await message.answer(
         "✅ Insta-ready карусель готова.\n\n"
         f"Слайдов: {len(slides_content)}\n"
-        f"Шрифт/тема: {font_style}\n"
+        f"Тема: {carousel_plan.theme_hint}\n"
+        f"Тон: {carousel_plan.tone}\n"
         f"Export: {export_dir}\n\n"
         f"Caption:\n{caption_preview}",
     )
     await state.clear()
-
-
-def choose_insta_font(slides_content: list[dict]) -> str:
-    title_lengths = [len(slide.get("title", "")) for slide in slides_content]
-    if not title_lengths:
-        return "standard"
-    average_length = sum(title_lengths) / len(title_lengths)
-    if average_length < 28:
-        return "dela"
-    if average_length < 42:
-        return "prosto"
-    return "standard"
 
 # --- 3. Analysis & Slide Count Selection ---
 

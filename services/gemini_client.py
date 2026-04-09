@@ -176,3 +176,68 @@ async def generate_instagram_caption(base_text: str, slides_content: list[dict])
     except Exception as e:
         logging.error(f"Error in generate_instagram_caption: {e}")
         return "Сохрани этот пост, чтобы вернуться к нему позже.\n\n#instagram #carousel #content #marketing #telegram"
+
+
+async def generate_instagram_carousel_plan(base_text: str, target_slides_count: int) -> dict:
+    """
+    Generate a structured carousel plan with slide roles and theme hints for
+    the Instagram auto mode.
+    """
+    model = genai.GenerativeModel(MODEL_NAME)
+
+    prompt = f"""Ты — контент-стратег и арт-директор Instagram-каруселей.
+
+На основе исходного текста собери JSON-план карусели из {target_slides_count} слайдов.
+
+Исходный текст:
+{base_text}
+
+Верни строго JSON в формате:
+{{
+  "carousel": {{
+    "goal": "instagram_carousel",
+    "audience": "кто читатель",
+    "tone": "clear_confident | bold_creator | premium_editorial",
+    "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium",
+    "cta": "save_and_follow | comment_and_dm | share_and_follow"
+  }},
+  "slides": [
+    {{
+      "index": 1,
+      "role": "hook | context | point | proof | example | checklist | cta",
+      "title": "короткий заголовок",
+      "body": "текст слайда",
+      "emphasis": ["ключевой акцент", "ещё один акцент"],
+      "density": "low | medium | high",
+      "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium"
+    }}
+  ]
+}}
+
+Требования:
+1. Язык — русский.
+2. Первый слайд должен быть hook.
+3. Последний слайд должен быть cta.
+4. Основные слайды должны чередовать context / point / proof / example, если это уместно.
+5. title не длиннее 90 символов.
+6. body не длиннее 260 символов.
+7. emphasis — только реальные смысловые акценты из этого слайда.
+8. Не добавляй markdown, комментарии или пояснения.
+"""
+
+    try:
+        response = await model.generate_content_async(
+            prompt,
+            generation_config={"response_mime_type": "application/json"},
+        )
+        text_response = response.text
+        if text_response.startswith("```json"):
+            text_response = text_response[7:]
+        if text_response.startswith("```"):
+            text_response = text_response[3:]
+        if text_response.endswith("```"):
+            text_response = text_response[:-3]
+        return json.loads(text_response)
+    except Exception as e:
+        logging.error(f"Error in generate_instagram_carousel_plan: {e}")
+        return {}
