@@ -265,8 +265,8 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       font-size: 24px;
       font-family: {body_font};
     }}
-    .footer .swipe {{
-      opacity: {("0.92" if spec.variant == "cover" else "0.0")};
+    .footer .note {{
+      opacity: {("0.86" if spec.variant == "cover" else "0.0")};
     }}
   </style>
 </head>
@@ -284,7 +284,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       <div class="supporting-cards">{cards}</div>
     </div>
     <div class="footer">
-      <div class="swipe">Swipe →</div>
+      <div class="note">Листай дальше</div>
       <div>{logo}</div>
     </div>
   </div>

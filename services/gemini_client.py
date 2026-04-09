@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 
 from openai import AsyncOpenAI
 
@@ -45,14 +46,14 @@ async def analyze_text_and_propose_slides(text: str) -> dict:
     try:
         result = await _router_json_request(prompt)
         if "recommended_slides" in result and "slides_plan" in result:
-            return result
+            return await _normalize_analysis_language(text, result)
     except Exception as e:
         logging.error(f"Error in analyze_text_and_propose_slides: {e}")
 
     try:
         result = await _openai_json_request(prompt)
         if "recommended_slides" in result and "slides_plan" in result:
-            return result
+            return await _normalize_analysis_language(text, result)
     except Exception as fallback_error:
         logging.error(f"OpenAI fallback failed in analyze_text_and_propose_slides: {fallback_error}")
 
@@ -100,7 +101,7 @@ async def generate_final_slides(base_text: str, target_slides_count: int, rewrit
         result = await _router_json_request(prompt)
         slides = result.get("slides", [])
         if isinstance(slides, list):
-            return slides
+            return await _normalize_slides_language(base_text, slides)
     except Exception as e:
         logging.error(f"Error in generate_final_slides: {e}")
 
@@ -108,7 +109,7 @@ async def generate_final_slides(base_text: str, target_slides_count: int, rewrit
         result = await _openai_json_request(prompt)
         slides = result.get("slides", [])
         if isinstance(slides, list):
-            return slides
+            return await _normalize_slides_language(base_text, slides)
     except Exception as fallback_error:
         logging.error(f"OpenAI fallback failed in generate_final_slides: {fallback_error}")
 
@@ -138,12 +139,14 @@ async def generate_instagram_caption(base_text: str, slides_content: list[dict])
 """
 
     try:
-        return await _router_text_request(prompt)
+        text_result = await _router_text_request(prompt)
+        return await _normalize_caption_language(base_text, text_result)
     except Exception as e:
         logging.error(f"Error in generate_instagram_caption: {e}")
 
     try:
-        return await _openai_text_request(prompt)
+        text_result = await _openai_text_request(prompt)
+        return await _normalize_caption_language(base_text, text_result)
     except Exception as fallback_error:
         logging.error(f"OpenAI fallback failed in generate_instagram_caption: {fallback_error}")
         return "Сохрани этот пост, чтобы вернуться к нему позже.\n\n#instagram #carousel #ai #opensource"
@@ -187,12 +190,14 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
 """
 
     try:
-        return await _router_json_request(prompt)
+        result = await _router_json_request(prompt)
+        return await _normalize_carousel_plan_language(base_text, result)
     except Exception as e:
         logging.error(f"Error in generate_instagram_carousel_plan: {e}")
 
     try:
-        return await _openai_json_request(prompt)
+        result = await _openai_json_request(prompt)
+        return await _normalize_carousel_plan_language(base_text, result)
     except Exception as fallback_error:
         logging.error(f"OpenAI fallback failed in generate_instagram_carousel_plan: {fallback_error}")
         return {}
@@ -244,3 +249,78 @@ async def _openai_text_request(prompt: str) -> str:
         ],
     )
     return (response.choices[0].message.content or "").strip()
+
+
+def _is_russian_source(text: str) -> bool:
+    cyr = len(re.findall(r"[А-Яа-яЁё]", text))
+    lat = len(re.findall(r"[A-Za-z]", text))
+    return cyr > lat
+
+
+def _looks_english_heavy(text: str) -> bool:
+    cyr = len(re.findall(r"[А-Яа-яЁё]", text))
+    lat = len(re.findall(r"[A-Za-z]", text))
+    return lat > cyr * 2 and lat > 20
+
+
+async def _normalize_analysis_language(source_text: str, result: dict) -> dict:
+    if not _is_russian_source(source_text):
+        return result
+    joined = " ".join(
+        f"{item.get('title', '')} {item.get('summary', '')}"
+        for item in result.get("slides_plan", [])
+    )
+    if not _looks_english_heavy(joined):
+        return result
+    prompt = f"""Переведи и нормализуй этот JSON на русский язык. Верни только JSON.
+
+{json.dumps(result, ensure_ascii=False)}
+"""
+    normalized = await _openai_json_request(prompt)
+    return normalized if "slides_plan" in normalized else result
+
+
+async def _normalize_slides_language(source_text: str, slides: list[dict]) -> list[dict]:
+    if not _is_russian_source(source_text):
+        return slides
+    joined = " ".join(f"{slide.get('title','')} {slide.get('body','')}" for slide in slides)
+    if not _looks_english_heavy(joined):
+        return slides
+    prompt = f"""Переведи и нормализуй этот JSON со слайдами на русский язык. Верни только JSON-объект.
+
+{json.dumps({'slides': slides}, ensure_ascii=False)}
+"""
+    normalized = await _openai_json_request(prompt)
+    result = normalized.get("slides", [])
+    return result if isinstance(result, list) else slides
+
+
+async def _normalize_carousel_plan_language(source_text: str, plan: dict) -> dict:
+    if not _is_russian_source(source_text):
+        return plan
+    joined = " ".join(
+        f"{slide.get('title','')} {slide.get('body','')}"
+        for slide in plan.get("slides", [])
+    )
+    if not _looks_english_heavy(joined):
+        return plan
+    prompt = f"""Переведи и нормализуй этот JSON-план карусели на русский язык.
+Не трогай системные поля role/theme_hint/tone/cta кроме текстовых значений title/body/emphasis/audience при необходимости.
+Верни только JSON.
+
+{json.dumps(plan, ensure_ascii=False)}
+"""
+    normalized = await _openai_json_request(prompt)
+    return normalized if "slides" in normalized else plan
+
+
+async def _normalize_caption_language(source_text: str, caption: str) -> str:
+    if not _is_russian_source(source_text):
+        return caption
+    if not _looks_english_heavy(caption):
+        return caption
+    prompt = f"""Перепиши этот caption полностью на русском языке, коротко и естественно:
+
+{caption}
+"""
+    return await _openai_text_request(prompt)
