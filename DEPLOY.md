@@ -47,9 +47,11 @@ nano .env
 Paste your keys:
 ```env
 TELEGRAM_BOT_TOKEN=your_token_here
-GEMINI_API_KEY=your_key_here
-FAL_KEY=your_key_here
 OPENAI_API_KEY=your_key_here
+OPENROUTER_API_KEY=your_key_here
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=google/gemini-3.1-flash-lite-preview
+FAL_KEY=your_key_here
 ADMIN_ID=your_telegram_user_id
 DATA_DIR=data
 EXPORTS_DIR=data/exports

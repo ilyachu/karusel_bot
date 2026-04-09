@@ -1,7 +1,7 @@
 # Telegram Carousel Bot
 
 This bot generates image carousels for Telegram/Instagram from text, voice, or forwarded messages.
-It uses Gemini for text analysis, OpenAI Whisper for speech recognition, and Fal.ai for background generation.
+It uses OpenRouter for text analysis/generation, OpenAI Whisper for speech recognition, and Fal.ai for background generation.
 It also includes an `Insta Auto` mode that generates an Instagram-ready carousel, caption, and export package with minimal interaction.
 
 ## Setup
@@ -21,7 +21,6 @@ It also includes an `Insta Auto` mode that generates an Instagram-ready carousel
     cp .env.example .env
     ```
     - `TELEGRAM_BOT_TOKEN`: From @BotFather
-    - `GEMINI_API_KEY`: From Google AI Studio
     - `OPENAI_API_KEY`: From OpenAI Platform
     - `OPENROUTER_API_KEY`: From OpenRouter for text generation
     - `OPENROUTER_BASE_URL`: optional, defaults to `https://openrouter.ai/api/v1`
@@ -63,8 +62,7 @@ not rely only on the LLM to decide whether a post should render as
 `growth_black`, `research_mono`, `founder_brief`, or `memory_archive`.
 
 Text generation now prefers OpenRouter for carousel planning/writing, with a
-fallback to the standard OpenAI client if needed. This avoids the Gemini
-geo-restriction issue seen on the production server.
+fallback to the standard OpenAI client if needed.
 
 ## Meta Publishing Prep
 

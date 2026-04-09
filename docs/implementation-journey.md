@@ -67,7 +67,7 @@ Key files:
 ### Current architecture
 
 1. User sends text / voice / forwarded post.
-2. Gemini produces an Instagram carousel plan.
+2. OpenRouter produces an Instagram carousel plan.
 3. Theme selection policy validates or overrides the proposed theme.
 4. Layout engine converts the carousel plan into layout specs.
 5. HTML renderer renders each slide.
