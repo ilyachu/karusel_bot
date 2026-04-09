@@ -1,10 +1,13 @@
 import unittest
 
 from services.layout_engine import (
+    DEFAULT_CTA_BODY,
+    DEFAULT_CTA_TITLE,
     apply_theme_selection_policy,
     apply_theme_override,
     build_fallback_instagram_plan,
     build_instagram_layout_specs,
+    enforce_default_cta_slide,
     parse_carousel_plan,
 )
 
@@ -116,6 +119,21 @@ class LayoutEngineTests(unittest.TestCase):
         self.assertEqual(selected.theme_hint, "research_mono")
         self.assertEqual(decision.selected_theme, "research_mono")
         self.assertIn("forced", decision.reason)
+
+    def test_default_cta_slide_always_replaces_last_slide(self):
+        plan = build_fallback_instagram_plan(
+            [
+                {"title": "Слайд 1", "body": "Текст 1"},
+                {"title": "Слайд 2", "body": "Текст 2"},
+                {"title": "Слайд 3", "body": "Текст 3"},
+            ],
+            theme_hint="research_mono",
+        )
+        updated = enforce_default_cta_slide(plan)
+
+        self.assertEqual(updated.slides[-1].role, "cta")
+        self.assertEqual(updated.slides[-1].title, DEFAULT_CTA_TITLE)
+        self.assertEqual(updated.slides[-1].body, DEFAULT_CTA_BODY)
 
 
 if __name__ == "__main__":

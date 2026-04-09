@@ -30,11 +30,14 @@ from services.gemini_client import (
 from services.export_hosting import build_public_export_info
 from services.instagram_package import build_instagram_export
 from services.layout_engine import (
+    DEFAULT_CTA_BODY,
+    DEFAULT_CTA_TITLE,
     THEME_LABELS,
     apply_theme_selection_policy,
     apply_theme_override,
     build_fallback_instagram_plan,
     build_instagram_layout_specs,
+    enforce_default_cta_slide,
     parse_carousel_plan,
 )
 from services.html_renderer import browser_binaries_hint, render_layout_spec_html
@@ -194,6 +197,11 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
 
     if not raw_plan:
         carousel_plan = build_fallback_instagram_plan(slides_content)
+    carousel_plan = enforce_default_cta_slide(carousel_plan)
+    slides_content = [
+        {"title": slide.title, "body": slide.body}
+        for slide in carousel_plan.slides
+    ]
     data = await state.get_data()
     theme_override = data.get("insta_theme_override", "auto")
     if theme_override and theme_override != "auto":

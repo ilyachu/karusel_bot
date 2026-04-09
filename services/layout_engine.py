@@ -1,6 +1,9 @@
 from dataclasses import asdict, dataclass, field, replace
 import re
 
+DEFAULT_CTA_TITLE = "Подписывайтесь на канал"
+DEFAULT_CTA_BODY = "Подписывайтесь на канал в шапке профиля чтоб получать больше информации"
+
 
 THEME_SYSTEMS = {
     "business_dark": {
@@ -213,6 +216,24 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
             )
         )
     return specs
+
+
+def enforce_default_cta_slide(plan: CarouselPlan) -> CarouselPlan:
+    if not plan.slides:
+        return plan
+
+    last_index = len(plan.slides)
+    updated_last = replace(
+        plan.slides[-1],
+        index=last_index,
+        role="cta",
+        title=DEFAULT_CTA_TITLE,
+        body=DEFAULT_CTA_BODY,
+        emphasis=[],
+        density="low",
+    )
+    updated_slides = list(plan.slides[:-1]) + [updated_last]
+    return replace(plan, slides=updated_slides, cta="follow_profile")
 
 
 def apply_theme_override(plan: CarouselPlan, theme_name: str) -> tuple[CarouselPlan, ThemeDecision]:
