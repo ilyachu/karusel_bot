@@ -50,6 +50,18 @@ THEME_SYSTEMS = {
             "cta": "Close",
         },
     },
+    "memory_archive": {
+        "font_style": "standard",
+        "eyebrows": {
+            "hook": "Memory",
+            "context": "Pressure",
+            "point": "Signal",
+            "proof": "System",
+            "example": "Test",
+            "checklist": "Notes",
+            "cta": "Save",
+        },
+    },
 }
 
 

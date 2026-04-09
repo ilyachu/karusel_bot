@@ -37,6 +37,17 @@ THEME_TOKENS = {
         "accent": "#f59e0b",
         "chip": "rgba(255,255,255,0.08)",
     },
+    "memory_archive": {
+        "bg": "linear-gradient(180deg, #f5f1e8 0%, #ebe4d7 100%)",
+        "panel": "rgba(255, 251, 245, 0.82)",
+        "text": "#1f2933",
+        "muted": "#52606d",
+        "accent": "#2f6f62",
+        "chip": "rgba(47,111,98,0.08)",
+        "line": "rgba(31,41,51,0.08)",
+        "display_font": "Georgia, 'Times New Roman', serif",
+        "body_font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    },
 }
 
 FONT_MAP = {
@@ -50,6 +61,8 @@ FONT_MAP = {
 def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     tokens = THEME_TOKENS.get(spec.theme, THEME_TOKENS["business_dark"])
     font_family = FONT_MAP.get(spec.font_style, FONT_MAP["standard"])
+    display_font = tokens.get("display_font", font_family)
+    body_font = tokens.get("body_font", font_family)
 
     title = html.escape(spec.title)
     body = html.escape(spec.body).replace("\n", "<br>")
@@ -62,9 +75,13 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
         for word in spec.highlight_words[:2]
         if word
     )
+    cards = _secondary_cards(spec, tokens)
 
     title_size = _title_size(spec.variant)
     body_size = _body_size(spec.variant)
+    title_max_width = "620px" if spec.theme == "memory_archive" and spec.variant not in {"cover", "closing"} else "860px"
+    body_max_width = "600px" if spec.theme == "memory_archive" and spec.variant not in {"cover", "closing"} else "840px"
+    supporting_style = _supporting_cards_style(spec)
 
     return f"""<!DOCTYPE html>
 <html lang="ru">
@@ -88,6 +105,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       width: 1080px;
       height: 1350px;
       padding: 48px;
+      background-image: {(_background_lines(tokens) if spec.theme == "memory_archive" else "none")};
     }}
     .frame {{
       position: absolute;
@@ -102,11 +120,21 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       justify-content: {_frame_justify(spec.variant)};
       gap: 26px;
       backdrop-filter: blur(22px);
+      overflow: hidden;
+    }}
+    .frame::before {{
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: {(_frame_texture(tokens) if spec.theme == "memory_archive" else "transparent")};
+      pointer-events: none;
     }}
     .topbar {{
       display: flex;
       justify-content: space-between;
       align-items: center;
+      position: relative;
+      z-index: 1;
     }}
     .badge, .progress {{
       display: inline-flex;
@@ -133,26 +161,36 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       line-height: 1.02;
       font-weight: 900;
       letter-spacing: -0.03em;
-      max-width: 860px;
+      max-width: {title_max_width};
       white-space: pre-wrap;
+      font-family: {display_font};
+      position: relative;
+      z-index: 1;
     }}
     .body {{
       font-size: {body_size}px;
       line-height: 1.38;
       color: {tokens["muted"]};
-      max-width: 840px;
+      max-width: {body_max_width};
       white-space: normal;
+      font-family: {body_font};
+      position: relative;
+      z-index: 1;
     }}
     .divider {{
       width: 180px;
       height: 8px;
       border-radius: 999px;
       background: {tokens["accent"]};
+      position: relative;
+      z-index: 1;
     }}
     .chips {{
       display: flex;
       gap: 14px;
       flex-wrap: wrap;
+      position: relative;
+      z-index: 1;
     }}
     .chip {{
       display: inline-flex;
@@ -164,6 +202,35 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       color: {tokens["accent"]};
       font-size: 18px;
       font-weight: 700;
+    }}
+    .supporting-cards {{
+      position: absolute;
+      {supporting_style}
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      width: 270px;
+      z-index: 0;
+      transform: {("rotate(-4deg)" if spec.theme == "memory_archive" else "none")};
+    }}
+    .support-card {{
+      padding: 16px 18px;
+      border-radius: 24px;
+      background: {(_support_card_bg(tokens, spec.theme))};
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.08);
+      color: {tokens["text"]};
+      font-size: 22px;
+      line-height: 1.25;
+      font-family: {body_font};
+    }}
+    .support-card strong {{
+      display: block;
+      margin-bottom: 8px;
+      color: {tokens["accent"]};
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
     }}
     .cta {{
       display: {("inline-flex" if spec.variant == "closing" else "none")};
@@ -186,6 +253,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       align-items: center;
       color: {tokens["muted"]};
       font-size: 24px;
+      font-family: {body_font};
     }}
     .footer .swipe {{
       opacity: {("0.92" if spec.variant == "cover" else "0.0")};
@@ -204,6 +272,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       <div class="body">{body}</div>
       <div class="chips">{chips}</div>
       <div class="cta">Save this carousel</div>
+      <div class="supporting-cards">{cards}</div>
     </div>
     <div class="footer">
       <div class="swipe">Swipe →</div>
@@ -278,3 +347,60 @@ def _body_size(variant: str) -> int:
         "stat_focus": 28,
         "checklist": 26,
     }.get(variant, 28)
+
+
+def _secondary_cards(spec: LayoutSpec, tokens: dict) -> str:
+    if spec.theme != "memory_archive":
+        cards = spec.highlight_words[:2]
+        return "".join(f'<div class="support-card"><strong>Note</strong>{html.escape(card)}</div>' for card in cards)
+
+    cards: list[tuple[str, str]] = []
+    if spec.variant == "cover":
+        cards = [
+            ("Context", "Окно растет, задачи растут быстрее"),
+            ("Memory", "Нужный контекст по запросу, а не всё подряд"),
+        ]
+    elif spec.role == "context":
+        cards = [
+            ("Pain", "Чаты, код и решения больше не помещаются в голову"),
+            ("Shift", "Память становится базовой инфраструктурой для агентов"),
+        ]
+    elif spec.role == "cta":
+        cards = [
+            ("Save", "Если копаешь memory layer, сохрани пост"),
+        ]
+    else:
+        cards = [
+            ("Key", spec.highlight_words[0] if spec.highlight_words else spec.badge_text),
+            ("Angle", "Локальное хранение + контекст по требованию"),
+        ]
+
+    return "".join(
+        f'<div class="support-card"><strong>{html.escape(label)}</strong>{html.escape(value)}</div>'
+        for label, value in cards[:2]
+    )
+
+
+def _background_lines(tokens: dict) -> str:
+    line = tokens.get("line", "rgba(0,0,0,0.05)")
+    return f"linear-gradient({line} 1px, transparent 1px), linear-gradient(90deg, {line} 1px, transparent 1px)"
+
+
+def _frame_texture(tokens: dict) -> str:
+    return f"linear-gradient(180deg, rgba(255,255,255,0.28), transparent 22%), radial-gradient(circle at top left, {tokens['chip']}, transparent 40%)"
+
+
+def _support_card_bg(tokens: dict, theme: str) -> str:
+    if theme == "memory_archive":
+        return "rgba(255, 248, 238, 0.94)"
+    return "rgba(255,255,255,0.06)"
+
+
+def _supporting_cards_style(spec: LayoutSpec) -> str:
+    if spec.theme != "memory_archive":
+        return "right: 34px; bottom: 42px;"
+    if spec.variant == "cover":
+        return "right: 34px; bottom: 42px;"
+    if spec.variant == "closing":
+        return "right: 34px; bottom: 42px;"
+    return "right: 34px; top: 300px;"

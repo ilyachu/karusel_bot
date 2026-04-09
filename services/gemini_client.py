@@ -198,7 +198,7 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
     "goal": "instagram_carousel",
     "audience": "кто читатель",
     "tone": "clear_confident | bold_creator | premium_editorial",
-    "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium",
+    "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive",
     "cta": "save_and_follow | comment_and_dm | share_and_follow"
   }},
   "slides": [
@@ -209,7 +209,7 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
       "body": "текст слайда",
       "emphasis": ["ключевой акцент", "ещё один акцент"],
       "density": "low | medium | high",
-      "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium"
+      "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive"
     }}
   ]
 }}

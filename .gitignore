@@ -14,6 +14,7 @@ data/
 bot.log
 bot_database.db
 voice_*.ogg
+output/
 
 # OS specific
 .DS_Store
