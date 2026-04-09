@@ -11,6 +11,9 @@ env/
 
 # Database and Logs
 data/
+bot.log
+bot_database.db
+voice_*.ogg
 
 # OS specific
 .DS_Store

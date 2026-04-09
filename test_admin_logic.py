@@ -1,7 +1,10 @@
 import unittest
 import os
-import sqlite3
+import sys
 from unittest.mock import patch
+
+sys.path.insert(0, os.path.dirname(__file__))
+
 import utils.database
 
 class TestAdminPanel(unittest.TestCase):

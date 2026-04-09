@@ -1,8 +1,9 @@
 import sqlite3
 import logging
 import os
+from config import DATA_DIR
 
-DB_FOLDER = "data"
+DB_FOLDER = DATA_DIR
 DB_NAME = os.path.join(DB_FOLDER, "bot_database.db")
 
 def init_db():

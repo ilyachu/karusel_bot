@@ -1,8 +1,9 @@
 import asyncio
 import logging
+import os
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update
-from config import TELEGRAM_BOT_TOKEN, ADMIN_ID
+from config import TELEGRAM_BOT_TOKEN, ADMIN_ID, DATA_DIR
 from handlers import common, carousel_flow, admin
 from utils.database import init_db
 from middlewares.access import AccessMiddleware
@@ -42,12 +43,14 @@ async def error_handler(event: ErrorEvent):
     return True
 
 async def main():
+    os.makedirs(DATA_DIR, exist_ok=True)
+
     # Configure logging with better format
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('data/bot.log'),
+            logging.FileHandler(os.path.join(DATA_DIR, "bot.log")),
             logging.StreamHandler()
         ]
     )
@@ -83,4 +86,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logging.info("Bot stopped by user")
         print("Bot stopped")
-

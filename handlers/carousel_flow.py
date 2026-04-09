@@ -746,7 +746,9 @@ async def generate_carousel(message: types.Message, state: FSMContext, user_id: 
             slide["body"],
             text_position=text_position,
             font_style=font_style,
-            logo_text=user_logo
+            logo_text=user_logo,
+            slide_index=i + 1,
+            total_slides=total_slides,
         )
         
         input_file = BufferedInputFile(image_buffer.getvalue(), filename=f"slide_{i+1}.png")
@@ -1135,6 +1137,7 @@ async def generate_fast_carousel(message: types.Message, state: FSMContext):
     slides = data["slides_content"]
     bg_type = data["bg_type"]
     font_style = data.get("font_style", "standard")
+    user_logo = get_user_logo(message.chat.id)
     
     # Prepare common background
     common_bg = None
@@ -1149,6 +1152,8 @@ async def generate_fast_carousel(message: types.Message, state: FSMContext):
     cover_bg = data.get("cover_image_bytes") # Bytes (Fixed key)
     
     media_group = []
+    total_slides = len(slides)
+
     for i, slide in enumerate(slides):
         # Determine BG for this slide
         current_bg = common_bg
@@ -1163,7 +1168,16 @@ async def generate_fast_carousel(message: types.Message, state: FSMContext):
         # But if we use the SAME BytesIO object 5 times, it might be fine if we seek(0) inside render_slide.
         # render_slide does seek(0).
         
-        img_buffer = render_slide(current_bg, slide['title'], slide['body'], "center", font_style)
+        img_buffer = render_slide(
+            current_bg,
+            slide['title'],
+            slide['body'],
+            "center",
+            font_style,
+            logo_text=user_logo,
+            slide_index=i + 1,
+            total_slides=total_slides,
+        )
         media_group.append(InputMediaPhoto(media=BufferedInputFile(img_buffer.read(), filename=f"slide_{i}.png")))
         
     await message.answer_media_group(media_group)

@@ -50,6 +50,8 @@ TELEGRAM_BOT_TOKEN=your_token_here
 GEMINI_API_KEY=your_key_here
 FAL_KEY=your_key_here
 OPENAI_API_KEY=your_key_here
+ADMIN_ID=your_telegram_user_id
+DATA_DIR=data
 ```
 Save and exit (`Ctrl+X`, `Y`, `Enter`).
 

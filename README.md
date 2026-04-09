@@ -19,6 +19,8 @@ It uses Gemini for text analysis, OpenAI Whisper for speech recognition, and Fal
     - `GEMINI_API_KEY`: From Google AI Studio
     - `OPENAI_API_KEY`: From OpenAI Platform
     - `FAL_KEY`: From Fal.ai
+    - `ADMIN_ID`: Telegram user ID with admin access
+    - `DATA_DIR`: optional, defaults to `data`
 
 3.  **Fonts**:
     Optionally place a `.ttf` font at `assets/fonts/font.ttf`.
@@ -28,3 +30,6 @@ It uses Gemini for text analysis, OpenAI Whisper for speech recognition, and Fal
 ```bash
 python main.py
 ```
+
+The bot stores logs and SQLite data in `DATA_DIR` so runtime artifacts stay out
+of the repository.
