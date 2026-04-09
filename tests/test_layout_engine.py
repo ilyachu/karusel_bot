@@ -1,6 +1,7 @@
 import unittest
 
 from services.layout_engine import (
+    apply_theme_selection_policy,
     build_fallback_instagram_plan,
     build_instagram_layout_specs,
     parse_carousel_plan,
@@ -73,6 +74,39 @@ class LayoutEngineTests(unittest.TestCase):
         self.assertGreaterEqual(len(specs[0].supporting_cards), 1)
         self.assertGreaterEqual(len(specs[1].supporting_cards), 1)
         self.assertEqual(len(specs[-1].supporting_cards), 1)
+
+    def test_theme_selection_policy_prefers_memory_archive_for_memory_posts(self):
+        plan = build_fallback_instagram_plan(
+            [{"title": "Поговорим про память", "body": "Память, контекст и MemPalace для AI агентов."}],
+            theme_hint="business_dark",
+        )
+        selected, decision = apply_theme_selection_policy(plan, "Память, контекст, Telegram и MemPalace для AI агентов")
+        self.assertEqual(selected.theme_hint, "memory_archive")
+        self.assertEqual(decision.selected_theme, "memory_archive")
+
+    def test_theme_selection_policy_prefers_growth_black_for_growth_posts(self):
+        plan = build_fallback_instagram_plan(
+            [{"title": "Рост выручки", "body": "CAC, ROMI, конверсии и трафик."}],
+            theme_hint="business_dark",
+        )
+        selected, _ = apply_theme_selection_policy(plan, "Разбор роста, CAC, ROMI, performance marketing и выручки")
+        self.assertEqual(selected.theme_hint, "growth_black")
+
+    def test_theme_selection_policy_prefers_research_mono_for_framework_posts(self):
+        plan = build_fallback_instagram_plan(
+            [{"title": "Фреймворк памяти", "body": "Research, architecture, protocol, benchmark."}],
+            theme_hint="business_dark",
+        )
+        selected, _ = apply_theme_selection_policy(plan, "Research on memory architecture, benchmark protocol and framework")
+        self.assertEqual(selected.theme_hint, "research_mono")
+
+    def test_theme_selection_policy_prefers_founder_brief_for_founder_posts(self):
+        plan = build_fallback_instagram_plan(
+            [{"title": "Product memo", "body": "Фаундер, стратегия, запуск и roadmap."}],
+            theme_hint="business_dark",
+        )
+        selected, _ = apply_theme_selection_policy(plan, "Фаундер, продукт, стратегия, roadmap и запуск")
+        self.assertEqual(selected.theme_hint, "founder_brief")
 
 
 if __name__ == "__main__":

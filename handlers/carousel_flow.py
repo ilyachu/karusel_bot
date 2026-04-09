@@ -23,6 +23,7 @@ from services.gemini_client import (
 )
 from services.instagram_package import build_instagram_export
 from services.layout_engine import (
+    apply_theme_selection_policy,
     build_fallback_instagram_plan,
     build_instagram_layout_specs,
     parse_carousel_plan,
@@ -183,6 +184,11 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
 
     if not raw_plan:
         carousel_plan = build_fallback_instagram_plan(slides_content)
+        theme_decision = None
+    else:
+        theme_decision = None
+
+    carousel_plan, theme_decision = apply_theme_selection_policy(carousel_plan, text)
 
     caption = await generate_instagram_caption(text, slides_content)
     user_logo = get_user_logo(message.chat.id)
@@ -226,6 +232,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             "carousel_plan": asdict(carousel_plan),
             "layout_specs": [spec.to_dict() for spec in layout_specs],
             "render_mode": render_mode,
+            "theme_decision": theme_decision.to_dict() if theme_decision else None,
         },
     )
 
@@ -238,6 +245,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         f"Слайдов: {len(slides_content)}\n"
         f"Тема: {carousel_plan.theme_hint}\n"
         f"Тон: {carousel_plan.tone}\n"
+        f"Policy: {theme_decision.reason}\n"
         f"Рендер: {render_mode}\n"
         f"Export: {export_dir}\n\n"
         f"Caption:\n{caption_preview}",

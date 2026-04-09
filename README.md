@@ -51,3 +51,7 @@ Use the `🚀 Insta Auto` button in Telegram, send source text, and the bot will
 When Playwright/Chromium is available, `Insta Auto` uses the richer HTML/CSS
 renderer. If not, it falls back to the Pillow renderer and tells you what to
 install.
+
+Theme selection is also filtered through a local policy layer, so the bot does
+not rely only on the LLM to decide whether a post should render as
+`growth_black`, `research_mono`, `founder_brief`, or `memory_archive`.

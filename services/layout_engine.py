@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import re
 
 
@@ -101,6 +101,28 @@ THEME_SYSTEMS = {
     },
 }
 
+THEME_KEYWORDS = {
+    "memory_archive": [
+        "memory", "mempalace", "памят", "контекст", "chat", "чаты",
+        "telegram", "knowledge", "замет", "архив", "документ", "context",
+    ],
+    "growth_black": [
+        "growth", "рост", "revenue", "выруч", "cpa", "cac", "roas", "romi",
+        "retention", "конверс", "воронк", "funnel", "marketing", "ads",
+        "реклама", "трафик", "sales", "crm", "scale", "performance",
+    ],
+    "founder_brief": [
+        "founder", "фаундер", "startup", "стартап", "product", "продукт",
+        "strategy", "стратег", "roadmap", "запуск", "команд", "позиционир",
+        "pricing", "gtm", "decision", "решени", "market", "рынок",
+    ],
+    "research_mono": [
+        "research", "исслед", "framework", "фреймворк", "protocol", "протокол",
+        "benchmark", "бенчмарк", "architecture", "архитект", "rag", "evaluation",
+        "paper", "hypothesis", "гипотез", "method", "метод", "model", "модель",
+    ],
+}
+
 
 @dataclass(frozen=True)
 class SlidePlanEntry:
@@ -144,6 +166,17 @@ class LayoutSpec:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class ThemeDecision:
+    selected_theme: str
+    proposed_theme: str
+    scores: dict[str, int]
+    reason: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
 def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
     theme = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "business_dark"
     theme_system = THEME_SYSTEMS[theme]
@@ -172,6 +205,38 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
             )
         )
     return specs
+
+
+def apply_theme_selection_policy(plan: CarouselPlan, source_text: str) -> tuple[CarouselPlan, ThemeDecision]:
+    scores = _score_themes(source_text, plan)
+    proposed = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "business_dark"
+    if proposed in scores:
+        scores[proposed] += 2
+
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    selected, top_score = ranked[0]
+    runner_up_score = ranked[1][1] if len(ranked) > 1 else -1
+
+    if top_score < 2:
+        selected = proposed if proposed in THEME_SYSTEMS else "business_dark"
+        reason = "No strong lexical signal detected; using proposed/default theme."
+    elif top_score == runner_up_score and proposed in THEME_SYSTEMS:
+        selected = proposed
+        reason = "Theme scores tied; keeping the model-proposed theme."
+    else:
+        reason = f"Theme policy selected `{selected}` from lexical/content signals."
+
+    updated_plan = replace(
+        plan,
+        theme_hint=selected,
+        slides=[replace(slide, theme_hint=selected) for slide in plan.slides],
+    )
+    return updated_plan, ThemeDecision(
+        selected_theme=selected,
+        proposed_theme=proposed,
+        scores=scores,
+        reason=reason,
+    )
 
 
 def parse_carousel_plan(raw_plan: dict) -> CarouselPlan:
@@ -330,3 +395,32 @@ def _trim_text(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 1].rstrip() + "…"
+
+
+def _score_themes(source_text: str, plan: CarouselPlan) -> dict[str, int]:
+    corpus = " ".join(
+        [
+            source_text,
+            plan.goal,
+            plan.audience,
+            plan.tone,
+            plan.cta,
+            " ".join(slide.title for slide in plan.slides),
+            " ".join(slide.body for slide in plan.slides),
+        ]
+    ).lower()
+
+    scores = {theme: 0 for theme in THEME_SYSTEMS.keys()}
+    for theme, keywords in THEME_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in corpus:
+                scores[theme] += 2 if len(keyword) > 6 else 1
+
+    if any(slide.role == "proof" for slide in plan.slides):
+        scores["research_mono"] += 1
+        scores["growth_black"] += 1
+    if any(slide.role == "cta" for slide in plan.slides):
+        scores["founder_brief"] += 1
+    if any("telegram" in slide.body.lower() or "github" in slide.body.lower() for slide in plan.slides):
+        scores["research_mono"] += 1
+    return scores
