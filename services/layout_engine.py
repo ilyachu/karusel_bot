@@ -361,33 +361,33 @@ def _build_supporting_cards(role: str, title: str, body: str, emphasis: list[str
     cards: list[dict] = []
 
     if role == "hook":
-        cards.append({"label": "Core", "text": emphasis[0] if emphasis else title})
+        cards.append({"label": "Главное", "text": emphasis[0] if emphasis else title})
         if sentences:
-            cards.append({"label": "Tension", "text": sentences[0]})
+            cards.append({"label": "Почему важно", "text": sentences[0]})
     elif role == "context":
-        cards.append({"label": "Why now", "text": sentences[0] if sentences else body})
+        cards.append({"label": "Контекст", "text": sentences[0] if sentences else body})
         if len(sentences) > 1:
-            cards.append({"label": "Pressure", "text": sentences[1]})
+            cards.append({"label": "Проблема", "text": sentences[1]})
     elif role == "proof":
-        cards.append({"label": "Signal", "text": emphasis[0] if emphasis else title})
+        cards.append({"label": "Факт", "text": emphasis[0] if emphasis else title})
         if sentences:
-            cards.append({"label": "Evidence", "text": sentences[0]})
+            cards.append({"label": "Что это даёт", "text": sentences[0]})
     elif role == "example":
-        cards.append({"label": "Case", "text": title})
+        cards.append({"label": "Пример", "text": title})
         if sentences:
-            cards.append({"label": "Observed", "text": sentences[0]})
+            cards.append({"label": "Наблюдение", "text": sentences[0]})
     elif role == "checklist":
         chunks = _extract_phrases(body, limit=3)
         for idx, chunk in enumerate(chunks, start=1):
-            cards.append({"label": f"Step {idx}", "text": chunk})
+            cards.append({"label": f"Шаг {idx}", "text": chunk})
     elif role == "cta":
-        cards.append({"label": "Next", "text": sentences[0] if sentences else body})
+        cards.append({"label": "Итог", "text": sentences[0] if sentences else body})
     else:
-        cards.append({"label": "Key", "text": emphasis[0] if emphasis else title})
+        cards.append({"label": "Суть", "text": emphasis[0] if emphasis else title})
         if density in {"medium", "high"} and sentences:
-            cards.append({"label": "Angle", "text": sentences[0]})
+            cards.append({"label": "Почему это интересно", "text": sentences[0]})
         if density == "high" and len(sentences) > 1:
-            cards.append({"label": "Detail", "text": sentences[1]})
+            cards.append({"label": "Деталь", "text": sentences[1]})
 
     deduped: list[dict] = []
     seen = set()

@@ -103,11 +103,6 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     logo = html.escape(logo_text)
     progress = f"{spec.slide_index}/{spec.total_slides}" if spec.show_progress else ""
 
-    chips = "".join(
-        f'<span class="chip">{html.escape(word)}</span>'
-        for word in spec.highlight_words[:2]
-        if word
-    )
     cards = _secondary_cards(spec, tokens)
 
     title_size = _title_size(spec.variant)
@@ -218,24 +213,6 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       position: relative;
       z-index: 1;
     }}
-    .chips {{
-      display: flex;
-      gap: 14px;
-      flex-wrap: wrap;
-      position: relative;
-      z-index: 1;
-    }}
-    .chip {{
-      display: inline-flex;
-      align-items: center;
-      min-height: 40px;
-      padding: 0 16px;
-      border-radius: {("12px" if spec.theme == "research_mono" else "999px")};
-      background: {tokens["chip"]};
-      color: {tokens["accent"]};
-      font-size: 18px;
-      font-weight: 700;
-    }}
     .supporting-cards {{
       position: absolute;
       {supporting_style}
@@ -266,16 +243,15 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       text-transform: uppercase;
       letter-spacing: 0.12em;
     }}
-    .cta {{
-      display: {("inline-flex" if spec.variant == "closing" else "none")};
-      align-items: center;
-      width: fit-content;
-      padding: 16px 24px;
-      border-radius: 20px;
-      background: rgba(255,255,255,0.07);
-      color: {tokens["text"]};
-      font-size: 22px;
+    .cta-note {{
+      display: {("block" if spec.variant == "closing" else "none")};
+      color: {tokens["accent"]};
+      font-size: 20px;
+      line-height: 1.4;
       font-weight: 700;
+      position: relative;
+      z-index: 1;
+      letter-spacing: 0.01em;
     }}
     .footer {{
       position: absolute;
@@ -304,8 +280,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       <div class="title">{title}</div>
       <div class="divider"></div>
       <div class="body">{body}</div>
-      <div class="chips">{chips}</div>
-      <div class="cta">Save this carousel</div>
+      <div class="cta-note">Сохрани пост и вернись к нему позже.</div>
       <div class="supporting-cards">{cards}</div>
     </div>
     <div class="footer">

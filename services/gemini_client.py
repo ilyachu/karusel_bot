@@ -1,301 +1,158 @@
-import google.generativeai as genai
 import json
-import os
 import logging
+import os
+
 from openai import AsyncOpenAI
 
-from config import GEMINI_API_KEY, OPENAI_API_KEY
+from config import (
+    OPENAI_API_KEY,
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL,
+    OPENROUTER_MODEL,
+)
 
-genai.configure(api_key=GEMINI_API_KEY)
+router_client = AsyncOpenAI(
+    api_key=OPENROUTER_API_KEY or OPENAI_API_KEY,
+    base_url=OPENROUTER_BASE_URL,
+)
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-
-# Use a model that supports JSON response if possible, or instruct it carefully.
-# gemini-1.5-flash is faster and cheaper.
-MODEL_NAME = "gemini-2.5-flash"
 OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-4o-mini")
 
+
 async def analyze_text_and_propose_slides(text: str) -> dict:
-    """
-    Analyzes text and proposes a slide structure.
-    Returns a dict with keys: recommended_slides (int), slides_plan (list of dicts).
-    """
-    model = genai.GenerativeModel(MODEL_NAME)
-    
     prompt = f"""
-    Ты — профессиональный контент-мейкер. Твоя задача — проанализировать текст на русском языке и предложить структуру для карусели (слайдов) в Instagram/Telegram.
-    
-    Входной текст:
-    {text}
-    
-    Требования:
-    1. Рекомендуемое количество слайдов: от 1 до 8.
-    2. Не делай слишком длинные блоки.
-    3. Первый слайд — цепляющий заголовок.
-    4. Последний слайд — вывод или Call to Action.
-    5. Верни ответ СТРОГО в формате JSON.
-    
-    Формат JSON:
+    Ты — редактор каруселей для Instagram и Telegram.
+
+    Проанализируй текст и верни только JSON:
     {{
       "recommended_slides": int,
       "slides_plan": [
-        {{ "slide_index": 1, "title": "Заголовок слайда", "summary": "Краткое описание идеи слайда" }},
-        ...
+        {{ "slide_index": 1, "title": "Заголовок", "summary": "Короткая суть слайда" }}
       ]
     }}
+
+    Требования:
+    1. Язык: русский.
+    2. Количество слайдов: 4-7, если текст не слишком короткий.
+    3. Первый слайд — сильный хук, но без кликбейта.
+    4. Не используй общие фразы вроде "откройте мир возможностей".
+    5. Не перегружай техническими деталями, если они не главные.
+
+    Исходный текст:
+    {text}
     """
-    
+
     try:
-        response = await model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
-        text_response = response.text
-        # Clean up markdown if present
-        if text_response.startswith("```json"):
-            text_response = text_response[7:]
-        if text_response.startswith("```"):
-            text_response = text_response[3:]
-        if text_response.endswith("```"):
-            text_response = text_response[:-3]
-            
-        return json.loads(text_response)
+        result = await _router_json_request(prompt)
+        if "recommended_slides" in result and "slides_plan" in result:
+            return result
     except Exception as e:
         logging.error(f"Error in analyze_text_and_propose_slides: {e}")
-        fallback_prompt = f"""
-        Ты — профессиональный контент-мейкер. Проанализируй текст и предложи структуру карусели.
 
-        Входной текст:
-        {text}
+    try:
+        result = await _openai_json_request(prompt)
+        if "recommended_slides" in result and "slides_plan" in result:
+            return result
+    except Exception as fallback_error:
+        logging.error(f"OpenAI fallback failed in analyze_text_and_propose_slides: {fallback_error}")
 
-        Верни строго JSON:
-        {{
-          "recommended_slides": int,
-          "slides_plan": [
-            {{ "slide_index": 1, "title": "Заголовок слайда", "summary": "Краткое описание идеи слайда" }}
-          ]
-        }}
-        """
-        try:
-            result = await _openai_json_request(fallback_prompt)
-            if "recommended_slides" in result and "slides_plan" in result:
-                return result
-        except Exception as fallback_error:
-            logging.error(f"OpenAI fallback failed in analyze_text_and_propose_slides: {fallback_error}")
-        return {
-            "recommended_slides": 1,
-            "slides_plan": [{"slide_index": 1, "title": "Ошибка анализа", "summary": "Не удалось проанализировать текст."}]
-        }
+    return {
+        "recommended_slides": 4,
+        "slides_plan": [
+            {"slide_index": 1, "title": "Ошибка анализа", "summary": "Не удалось проанализировать текст."}
+        ],
+    }
+
 
 async def generate_final_slides(base_text: str, target_slides_count: int, rewrite_style: str) -> list[dict]:
-    """
-    Generates final text for each slide based on the plan and user preferences.
-    Returns a list of dicts: [{"title": "...", "body": "..."}, ...]
-    """
-    model = genai.GenerativeModel(MODEL_NAME)
-    
     style_instructions = {
-        "exact": """КРИТИЧЕСКИ ВАЖНО: Максимально сохраняй оригинальный текст!
-        - Используй ТОЛЬКО фразы и формулировки из исходного текста
-        - НЕ переписывай, НЕ перефразируй, НЕ добавляй своих слов
-        - Просто логически разбей текст на части
-        - Можешь лишь слегка сократить для формата слайда
-        - Заголовки можешь взять из самого текста или сделать короткими (1-3 слова)""",
-        
-        "marketing": """Пиши продающим языком:
-        - Используй триггеры и эмоциональную окраску
-        - Добавляй призывы к действию
-        - Делай акцент на выгодах
-        - Используй цепляющие заголовки""",
-        
-        "educational": """Пиши в обучающем стиле:
-        - Четко и структурировано
-        - С полезными выводами
-        - Логичное изложение от простого к сложному
-        - Понятным языком""",
-        
-        "concise": """Пиши максимально кратко:
-        - Убирай всё лишнее
-        - Оставляй только суть
-        - Короткие ёмкие фразы
-        - Без "воды" """
+        "exact": "Максимально сохраняй исходные формулировки, только аккуратно разбей на слайды.",
+        "marketing": "Пиши живо, но без рекламной шелухи и банальных клише.",
+        "educational": "Пиши ясно, структурно и по делу.",
+        "concise": "Пиши коротко, без воды и повторов.",
     }
-    
-    instruction = style_instructions.get(rewrite_style, "Пиши интересно и понятно.")
-    
-    prompt = f"""Ты — редактор слайдов. Напиши финальный текст для карусели из {target_slides_count} слайдов.
+    instruction = style_instructions.get(rewrite_style, "Пиши ясно и по делу.")
 
-Исходный текст:
-{base_text}
+    prompt = f"""Ты — редактор слайдов.
 
-Стиль: {instruction}
-
-ТРЕБОВАНИЯ:
-1. Язык: Русский
-2. Объем 'body': 2-6 строк (максимум 300 символов), подходящий для формата 1080x1350
-3. Каждый слайд — законченная мысль
-4. Если выбран стиль "exact" - НЕ ПЕРЕПИСЫВАЙ текст, просто разбей его логически на {target_slides_count} частей
-5. Формат JSON: массив объектов с полями "title" и "body"
-6. НЕ используй markdown (```json)
-7. ВАЖНО: Заголовок (title) НЕ должен дублироваться в тексте (body). Заголовок — это хук, а текст раскрывает мысль. Не повторяй одно и то же.
-
-Формат ответа:
-[
-  {{ "title": "Заголовок слайда", "body": "Текст слайда..." }},
-  ...
-]
-"""
-    
-    try:
-        response = await model.generate_content_async(prompt, generation_config={"response_mime_type": "application/json"})
-        text_response = response.text
-        # Clean up markdown if present
-        if text_response.startswith("```json"):
-            text_response = text_response[7:]
-        if text_response.startswith("```"):
-            text_response = text_response[3:]
-        if text_response.endswith("```"):
-            text_response = text_response[:-3]
-            
-        return json.loads(text_response)
-    except Exception as e:
-        logging.error(f"Error in generate_final_slides: {e}")
-        fallback_prompt = f"""Ты — редактор слайдов. Напиши финальный текст для карусели из {target_slides_count} слайдов.
-
-Исходный текст:
-{base_text}
-
-Стиль: {instruction}
-
-Верни строго JSON-объект:
+Собери карусель из {target_slides_count} слайдов и верни только JSON-объект:
 {{
   "slides": [
-    {{ "title": "Заголовок слайда", "body": "Текст слайда..." }}
+    {{ "title": "Заголовок", "body": "Текст слайда" }}
   ]
 }}
+
+Требования:
+1. Язык: русский.
+2. Каждый слайд должен нести отдельную мысль.
+3. Заголовки короткие, без кликбейта.
+4. Body не длиннее 260 символов.
+5. Не использовать пустые маркетинговые формулировки.
+6. Не злоупотреблять лишней технической детализацией.
+7. Не писать "подпишись", "поделись" и подобные CTA внутри обычных слайдов.
+8. Стиль: {instruction}
+
+Исходный текст:
+{base_text}
 """
-        try:
-            result = await _openai_json_request(fallback_prompt)
-            slides = result.get("slides", [])
-            if isinstance(slides, list):
-                return slides
-        except Exception as fallback_error:
-            logging.error(f"OpenAI fallback failed in generate_final_slides: {fallback_error}")
-        return []
+
+    try:
+        result = await _router_json_request(prompt)
+        slides = result.get("slides", [])
+        if isinstance(slides, list):
+            return slides
+    except Exception as e:
+        logging.error(f"Error in generate_final_slides: {e}")
+
+    try:
+        result = await _openai_json_request(prompt)
+        slides = result.get("slides", [])
+        if isinstance(slides, list):
+            return slides
+    except Exception as fallback_error:
+        logging.error(f"OpenAI fallback failed in generate_final_slides: {fallback_error}")
+
+    return []
 
 
 async def generate_instagram_caption(base_text: str, slides_content: list[dict]) -> str:
-    """
-    Generate a concise Instagram caption that matches the final carousel.
-    """
-    model = genai.GenerativeModel(MODEL_NAME)
-
     slides_summary = "\n".join(
         f"- {slide.get('title', '').strip()}: {slide.get('body', '').strip()}"
         for slide in slides_content
     )
 
-    prompt = f"""Ты — SMM-редактор. Напиши caption для Instagram-карусели.
+    prompt = f"""Ты — редактор Instagram-подписей.
+
+Напиши caption на русском:
+1. Короткий хук.
+2. 2-4 коротких абзаца по сути.
+3. Один мягкий CTA в конце.
+4. Без воды и без штампов.
+5. 4-6 релевантных хэштегов в конце.
 
 Исходный текст:
 {base_text}
 
-Слайды карусели:
+Слайды:
 {slides_summary}
-
-Требования:
-1. Язык: русский.
-2. Стиль: живой, уверенный, без воды.
-3. Структура:
-   - 1 короткий хук
-   - 2-4 абзаца сути
-   - 1 CTA в конце
-4. Не больше 1200 символов.
-5. Добавь 5-8 релевантных хэштегов в конце.
-6. Не используй markdown.
 """
 
     try:
-        response = await model.generate_content_async(prompt)
-        return response.text.strip()
+        return await _router_text_request(prompt)
     except Exception as e:
         logging.error(f"Error in generate_instagram_caption: {e}")
-        try:
-            return await _openai_text_request(prompt)
-        except Exception as fallback_error:
-            logging.error(f"OpenAI fallback failed in generate_instagram_caption: {fallback_error}")
-            return "Сохрани этот пост, чтобы вернуться к нему позже.\n\n#instagram #carousel #content #marketing #telegram"
+
+    try:
+        return await _openai_text_request(prompt)
+    except Exception as fallback_error:
+        logging.error(f"OpenAI fallback failed in generate_instagram_caption: {fallback_error}")
+        return "Сохрани этот пост, чтобы вернуться к нему позже.\n\n#instagram #carousel #ai #opensource"
 
 
 async def generate_instagram_carousel_plan(base_text: str, target_slides_count: int) -> dict:
-    """
-    Generate a structured carousel plan with slide roles and theme hints for
-    the Instagram auto mode.
-    """
-    model = genai.GenerativeModel(MODEL_NAME)
+    prompt = f"""Ты — контент-стратег Instagram-каруселей.
 
-    prompt = f"""Ты — контент-стратег и арт-директор Instagram-каруселей.
-
-На основе исходного текста собери JSON-план карусели из {target_slides_count} слайдов.
-
-Исходный текст:
-{base_text}
-
-Верни строго JSON в формате:
-{{
-  "carousel": {{
-    "goal": "instagram_carousel",
-    "audience": "кто читатель",
-    "tone": "clear_confident | bold_creator | premium_editorial",
-    "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive | founder_brief | growth_black | research_mono",
-    "cta": "save_and_follow | comment_and_dm | share_and_follow"
-  }},
-  "slides": [
-    {{
-      "index": 1,
-      "role": "hook | context | point | proof | example | checklist | cta",
-      "title": "короткий заголовок",
-      "body": "текст слайда",
-      "emphasis": ["ключевой акцент", "ещё один акцент"],
-      "density": "low | medium | high",
-      "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive | founder_brief | growth_black | research_mono"
-    }}
-  ]
-}}
-
-Требования:
-1. Язык — русский.
-2. Первый слайд должен быть hook.
-3. Последний слайд должен быть cta.
-4. Основные слайды должны чередовать context / point / proof / example, если это уместно.
-5. title не длиннее 90 символов.
-6. body не длиннее 260 символов.
-7. emphasis — только реальные смысловые акценты из этого слайда.
-8. Не добавляй markdown, комментарии или пояснения.
-9. Выбирай `theme_hint` осознанно по типу контента:
-   - `founder_brief` для коротких founder / product / strategy постов
-   - `growth_black` для growth, performance, marketing, revenue, ops
-   - `research_mono` для research, frameworks, technical explainers
-   - `memory_archive` для memory, knowledge, note-like editorial posts
-"""
-
-    try:
-        response = await model.generate_content_async(
-            prompt,
-            generation_config={"response_mime_type": "application/json"},
-        )
-        text_response = response.text
-        if text_response.startswith("```json"):
-            text_response = text_response[7:]
-        if text_response.startswith("```"):
-            text_response = text_response[3:]
-        if text_response.endswith("```"):
-            text_response = text_response[:-3]
-        return json.loads(text_response)
-    except Exception as e:
-        logging.error(f"Error in generate_instagram_carousel_plan: {e}")
-        fallback_prompt = f"""Ты — контент-стратег Instagram-каруселей.
-
-Собери строго JSON-план карусели из {target_slides_count} слайдов по исходному тексту:
-{base_text}
-
-Формат:
+Собери JSON-план карусели из {target_slides_count} слайдов и верни только JSON:
 {{
   "carousel": {{
     "goal": "instagram_carousel",
@@ -316,12 +173,53 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
     }}
   ]
 }}
+
+Требования:
+1. Первый слайд — hook, последний — cta.
+2. Не использовать банальные marketing-фразы.
+3. Упрощать лишнюю техническую информацию, если она не несёт главную мысль.
+4. Если это новость/инструмент, делай акцент на сути, а не на hype.
+5. Не добавляй кнопки "поделиться/подписаться" внутрь текста слайда.
+6. Выбирай `theme_hint` осознанно.
+
+Исходный текст:
+{base_text}
 """
-        try:
-            return await _openai_json_request(fallback_prompt)
-        except Exception as fallback_error:
-            logging.error(f"OpenAI fallback failed in generate_instagram_carousel_plan: {fallback_error}")
-            return {}
+
+    try:
+        return await _router_json_request(prompt)
+    except Exception as e:
+        logging.error(f"Error in generate_instagram_carousel_plan: {e}")
+
+    try:
+        return await _openai_json_request(prompt)
+    except Exception as fallback_error:
+        logging.error(f"OpenAI fallback failed in generate_instagram_carousel_plan: {fallback_error}")
+        return {}
+
+
+async def _router_json_request(prompt: str) -> dict:
+    response = await router_client.chat.completions.create(
+        model=OPENROUTER_MODEL,
+        messages=[
+            {"role": "system", "content": "Return valid JSON only. No markdown fences, no explanation."},
+            {"role": "user", "content": prompt},
+        ],
+        response_format={"type": "json_object"},
+    )
+    content = response.choices[0].message.content or "{}"
+    return json.loads(content)
+
+
+async def _router_text_request(prompt: str) -> str:
+    response = await router_client.chat.completions.create(
+        model=OPENROUTER_MODEL,
+        messages=[
+            {"role": "system", "content": "Write concise Russian editorial/social copy without marketing fluff."},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    return (response.choices[0].message.content or "").strip()
 
 
 async def _openai_json_request(prompt: str) -> dict:
@@ -341,7 +239,7 @@ async def _openai_text_request(prompt: str) -> str:
     response = await openai_client.chat.completions.create(
         model=OPENAI_TEXT_MODEL,
         messages=[
-            {"role": "system", "content": "Write concise, clean Russian marketing/editorial copy."},
+            {"role": "system", "content": "Write concise Russian editorial/social copy without marketing fluff."},
             {"role": "user", "content": prompt},
         ],
     )

@@ -23,6 +23,9 @@ It also includes an `Insta Auto` mode that generates an Instagram-ready carousel
     - `TELEGRAM_BOT_TOKEN`: From @BotFather
     - `GEMINI_API_KEY`: From Google AI Studio
     - `OPENAI_API_KEY`: From OpenAI Platform
+    - `OPENROUTER_API_KEY`: From OpenRouter for text generation
+    - `OPENROUTER_BASE_URL`: optional, defaults to `https://openrouter.ai/api/v1`
+    - `OPENROUTER_MODEL`: optional, defaults to `google/gemini-3.1-flash-lite-preview`
     - `FAL_KEY`: From Fal.ai
     - `ADMIN_ID`: Telegram user ID with admin access
     - `DATA_DIR`: optional, defaults to `data`
@@ -58,6 +61,10 @@ install.
 Theme selection is also filtered through a local policy layer, so the bot does
 not rely only on the LLM to decide whether a post should render as
 `growth_black`, `research_mono`, `founder_brief`, or `memory_archive`.
+
+Text generation now prefers OpenRouter for carousel planning/writing, with a
+fallback to the standard OpenAI client if needed. This avoids the Gemini
+geo-restriction issue seen on the production server.
 
 ## Meta Publishing Prep
 
