@@ -1,3 +1,4 @@
+import asyncio
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
@@ -26,6 +27,7 @@ from services.layout_engine import (
     build_instagram_layout_specs,
     parse_carousel_plan,
 )
+from services.html_renderer import browser_binaries_hint, render_layout_spec_html
 from services.openai_speech import transcribe_voice
 from services.fal_client import generate_background
 from services.image_renderer import render_layout_spec, render_slide
@@ -188,13 +190,23 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
 
     rendered_buffers: list[BytesIO] = []
     media_group = []
+    render_mode = "html"
     for layout_spec in layout_specs:
-        image_buffer = render_layout_spec(
-            layout_spec,
-            logo_text=user_logo,
-            bg_source=None,
-        )
-        rendered_bytes = image_buffer.getvalue()
+        try:
+            rendered_bytes = await asyncio.to_thread(
+                render_layout_spec_html,
+                layout_spec,
+                user_logo,
+            )
+        except Exception as exc:
+            logging.warning("HTML renderer unavailable, falling back to Pillow: %s", exc)
+            render_mode = "pillow-fallback"
+            image_buffer = render_layout_spec(
+                layout_spec,
+                logo_text=user_logo,
+                bg_source=None,
+            )
+            rendered_bytes = image_buffer.getvalue()
         rendered_buffers.append(BytesIO(rendered_bytes))
         media_group.append(
             InputMediaPhoto(
@@ -213,6 +225,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         extra_metadata={
             "carousel_plan": asdict(carousel_plan),
             "layout_specs": [spec.to_dict() for spec in layout_specs],
+            "render_mode": render_mode,
         },
     )
 
@@ -225,9 +238,12 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         f"Слайдов: {len(slides_content)}\n"
         f"Тема: {carousel_plan.theme_hint}\n"
         f"Тон: {carousel_plan.tone}\n"
+        f"Рендер: {render_mode}\n"
         f"Export: {export_dir}\n\n"
         f"Caption:\n{caption_preview}",
     )
+    if render_mode != "html":
+        await message.answer(browser_binaries_hint())
     await state.clear()
 
 # --- 3. Analysis & Slide Count Selection ---

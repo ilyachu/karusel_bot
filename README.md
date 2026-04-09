@@ -10,6 +10,10 @@ It also includes an `Insta Auto` mode that generates an Instagram-ready carousel
     ```bash
     pip install -r requirements.txt
     ```
+    Install Chromium for the rich Insta Auto renderer:
+    ```bash
+    python -m playwright install chromium
+    ```
 
 2.  **Environment Variables**:
     Copy `.env.example` to `.env` and fill in your keys:
@@ -43,3 +47,7 @@ Use the `🚀 Insta Auto` button in Telegram, send source text, and the bot will
 - prepare a caption
 - save an export package in `EXPORTS_DIR`
 - persist the `carousel plan` and `layout specs` in `metadata.json`
+
+When Playwright/Chromium is available, `Insta Auto` uses the richer HTML/CSS
+renderer. If not, it falls back to the Pillow renderer and tells you what to
+install.

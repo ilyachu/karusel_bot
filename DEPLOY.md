@@ -64,6 +64,12 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
+The Docker image installs Chromium for the rich `Insta Auto` renderer during
+build. If you run outside Docker, install it manually:
+```bash
+python -m playwright install chromium
+```
+
 ## Maintenance
 - **Restart**: `docker compose restart`
 - **Stop**: `docker compose down`
