@@ -233,7 +233,17 @@ def apply_theme_override(plan: CarouselPlan, theme_name: str) -> tuple[CarouselP
 def apply_theme_selection_policy(plan: CarouselPlan, source_text: str) -> tuple[CarouselPlan, ThemeDecision]:
     scores = _score_themes(source_text, plan)
     proposed = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "business_dark"
-    if proposed in scores:
+    auto_allowed = {
+        "business_dark",
+        "minimal_light",
+        "editorial_premium",
+        "memory_archive",
+        "founder_brief",
+        "growth_black",
+        "research_mono",
+    }
+    scores.pop("creator_bold", None)
+    if proposed in scores and proposed in auto_allowed:
         scores[proposed] += 2
 
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
@@ -241,9 +251,9 @@ def apply_theme_selection_policy(plan: CarouselPlan, source_text: str) -> tuple[
     runner_up_score = ranked[1][1] if len(ranked) > 1 else -1
 
     if top_score < 2:
-        selected = proposed if proposed in THEME_SYSTEMS else "business_dark"
+        selected = proposed if proposed in auto_allowed else "business_dark"
         reason = "No strong lexical signal detected; using proposed/default theme."
-    elif top_score == runner_up_score and proposed in THEME_SYSTEMS:
+    elif top_score == runner_up_score and proposed in auto_allowed:
         selected = proposed
         reason = "Theme scores tied; keeping the model-proposed theme."
     else:
