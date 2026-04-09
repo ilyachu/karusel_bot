@@ -71,10 +71,8 @@ class LayoutEngineTests(unittest.TestCase):
         )
         specs = build_instagram_layout_specs(plan)
 
-        self.assertTrue(all(0 <= len(spec.supporting_cards) <= 3 for spec in specs))
-        self.assertGreaterEqual(len(specs[0].supporting_cards), 1)
-        self.assertGreaterEqual(len(specs[1].supporting_cards), 1)
-        self.assertEqual(len(specs[-1].supporting_cards), 1)
+        self.assertTrue(all(0 <= len(spec.supporting_cards) <= 2 for spec in specs))
+        self.assertTrue(all(card["label"] == "" for spec in specs for card in spec.supporting_cards))
 
     def test_theme_selection_policy_prefers_memory_archive_for_memory_posts(self):
         plan = build_fallback_instagram_plan(

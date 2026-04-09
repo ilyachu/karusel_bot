@@ -203,7 +203,7 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
                 font_style=theme_system["font_style"],
                 variant=variant,
                 text_position=text_position,
-                badge_text=theme_system["eyebrows"].get(slide.role, "Slide"),
+                badge_text=_badge_text_for_role(theme_system["eyebrows"].get(slide.role, ""), slide.role),
                 title=slide.title,
                 body=slide.body,
                 highlight_words=slide.emphasis,
@@ -362,54 +362,29 @@ def _build_supporting_cards(role: str, title: str, body: str, emphasis: list[str
     cards: list[dict] = []
 
     if role == "hook":
-        if emphasis and len(emphasis[0]) > 12:
+        if emphasis and _not_duplicate(emphasis[0], title, body):
             cards.append({"label": "", "text": emphasis[0]})
-        if phrases:
+        elif phrases and _not_duplicate(phrases[0], title, body):
             cards.append({"label": "", "text": phrases[0]})
-        elif sentences:
-            cards.append({"label": "", "text": sentences[0]})
-    elif role == "context":
-        if phrases:
+    elif role == "checklist":
+        chunks = _extract_phrases(body, limit=2)
+        for chunk in chunks:
+            if _not_duplicate(chunk, title, body):
+                cards.append({"label": "", "text": chunk})
+    elif role == "cta":
+        if phrases and _not_duplicate(phrases[0], title, body):
             cards.append({"label": "", "text": phrases[0]})
-        if len(phrases) > 1:
-            cards.append({"label": "", "text": phrases[1]})
-        elif len(sentences) > 1:
-            cards.append({"label": "", "text": sentences[1]})
-    elif role == "proof":
-        if phrases:
-            cards.append({"label": "", "text": phrases[0]})
-        if len(phrases) > 1:
+    elif role == "proof" and density == "high":
+        if len(phrases) > 1 and _not_duplicate(phrases[1], title, body):
             cards.append({"label": "", "text": phrases[1]})
     elif role == "example":
-        if phrases:
-            cards.append({"label": "", "text": phrases[0]})
-        if len(phrases) > 1:
+        if len(phrases) > 1 and _not_duplicate(phrases[1], title, body):
             cards.append({"label": "", "text": phrases[1]})
-    elif role == "checklist":
-        chunks = _extract_phrases(body, limit=3)
-        for chunk in chunks:
-            cards.append({"label": "", "text": chunk})
-    elif role == "cta":
-        if phrases:
-            cards.append({"label": "", "text": phrases[0]})
-        elif sentences:
-            cards.append({"label": "", "text": sentences[0]})
-    else:
-        if phrases:
-            cards.append({"label": "", "text": phrases[0]})
-        elif emphasis:
-            cards.append({"label": "", "text": emphasis[0]})
-        if density in {"medium", "high"} and len(phrases) > 1:
-            cards.append({"label": "", "text": phrases[1]})
-        elif density in {"medium", "high"} and len(sentences) > 1:
-            cards.append({"label": "", "text": sentences[1]})
-        if density == "high" and len(phrases) > 2:
-            cards.append({"label": "", "text": phrases[2]})
 
     deduped: list[dict] = []
     seen = set()
     for card in cards:
-        text = _trim_text(card["text"], 52)
+        text = _trim_text(card["text"], 34)
         if not text:
             continue
         key = (card["label"], text)
@@ -417,7 +392,7 @@ def _build_supporting_cards(role: str, title: str, body: str, emphasis: list[str
             continue
         seen.add(key)
         deduped.append({"label": card["label"], "text": text})
-    return deduped[:3]
+    return deduped[:2]
 
 
 def _extract_sentences(text: str) -> list[str]:
@@ -435,6 +410,27 @@ def _trim_text(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 1].rstrip() + "…"
+
+
+def _not_duplicate(candidate: str, title: str, body: str) -> bool:
+    normalized = candidate.strip().lower()
+    if not normalized:
+        return False
+    title_norm = title.strip().lower()
+    body_norm = body.strip().lower()
+    if normalized == title_norm:
+        return False
+    if normalized in body_norm and len(normalized) > 12:
+        return False
+    return True
+
+
+def _badge_text_for_role(label: str, role: str) -> str:
+    # Keep only distinctive cover/checklist markers; regular editorial slides
+    # should not look like system cards.
+    if role in {"hook", "checklist"}:
+        return label
+    return ""
 
 
 def _score_themes(source_text: str, plan: CarouselPlan) -> dict[str, int]:

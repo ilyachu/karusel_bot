@@ -159,10 +159,11 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     }}
     .topbar {{
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       align-items: center;
       position: relative;
       z-index: 1;
+      min-height: 46px;
     }}
     .badge, .progress {{
       display: inline-flex;
@@ -179,6 +180,9 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       text-transform: uppercase;
       letter-spacing: 0.12em;
       font-weight: 700;
+      margin-right: auto;
+      opacity: {("1" if badge else "0")};
+      visibility: {("visible" if badge else "hidden")};
     }}
     .progress {{
       color: {tokens["text"]};
@@ -219,20 +223,20 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       display: flex;
       flex-direction: column;
       gap: 14px;
-      width: 270px;
+      width: 220px;
       z-index: 0;
       transform: {(_supporting_transform(spec))};
       opacity: {("1" if cards else "0")};
     }}
     .support-card {{
-      padding: 16px 18px;
+      padding: 14px 16px;
       border-radius: {("12px" if spec.theme == "research_mono" else "24px")};
       background: {(_support_card_bg(tokens, spec.theme))};
       border: 1px solid {_support_border(spec.theme)};
       box-shadow: {_support_shadow(spec.theme)};
       color: {tokens["text"]};
-      font-size: 20px;
-      line-height: 1.33;
+      font-size: 18px;
+      line-height: 1.3;
       font-family: {body_font};
     }}
     .cta-note {{
