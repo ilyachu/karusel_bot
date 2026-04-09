@@ -211,7 +211,8 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       gap: 14px;
       width: 270px;
       z-index: 0;
-      transform: {("rotate(-4deg)" if spec.theme == "memory_archive" else "none")};
+      transform: {(_supporting_transform(spec))};
+      opacity: {("1" if cards else "0")};
     }}
     .support-card {{
       padding: 16px 18px;
@@ -350,34 +351,9 @@ def _body_size(variant: str) -> int:
 
 
 def _secondary_cards(spec: LayoutSpec, tokens: dict) -> str:
-    if spec.theme != "memory_archive":
-        cards = spec.highlight_words[:2]
-        return "".join(f'<div class="support-card"><strong>Note</strong>{html.escape(card)}</div>' for card in cards)
-
-    cards: list[tuple[str, str]] = []
-    if spec.variant == "cover":
-        cards = [
-            ("Context", "Окно растет, задачи растут быстрее"),
-            ("Memory", "Нужный контекст по запросу, а не всё подряд"),
-        ]
-    elif spec.role == "context":
-        cards = [
-            ("Pain", "Чаты, код и решения больше не помещаются в голову"),
-            ("Shift", "Память становится базовой инфраструктурой для агентов"),
-        ]
-    elif spec.role == "cta":
-        cards = [
-            ("Save", "Если копаешь memory layer, сохрани пост"),
-        ]
-    else:
-        cards = [
-            ("Key", spec.highlight_words[0] if spec.highlight_words else spec.badge_text),
-            ("Angle", "Локальное хранение + контекст по требованию"),
-        ]
-
     return "".join(
-        f'<div class="support-card"><strong>{html.escape(label)}</strong>{html.escape(value)}</div>'
-        for label, value in cards[:2]
+        f'<div class="support-card"><strong>{html.escape(card["label"])}</strong>{html.escape(card["text"])}</div>'
+        for card in spec.supporting_cards[:3]
     )
 
 
@@ -404,3 +380,11 @@ def _supporting_cards_style(spec: LayoutSpec) -> str:
     if spec.variant == "closing":
         return "right: 34px; bottom: 42px;"
     return "right: 34px; top: 300px;"
+
+
+def _supporting_transform(spec: LayoutSpec) -> str:
+    if spec.theme != "memory_archive":
+        return "none"
+    if len(spec.supporting_cards) >= 2:
+        return "rotate(-4deg)"
+    return "none"

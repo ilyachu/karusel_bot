@@ -1,4 +1,5 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+import re
 
 
 THEME_SYSTEMS = {
@@ -101,6 +102,7 @@ class LayoutSpec:
     highlight_words: list[str]
     density: str
     show_progress: bool
+    supporting_cards: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -130,6 +132,7 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
                 highlight_words=slide.emphasis,
                 density=slide.density,
                 show_progress=total_slides > 1,
+                supporting_cards=_build_supporting_cards(slide.role, slide.title, slide.body, slide.emphasis, slide.density),
             )
         )
     return specs
@@ -227,3 +230,67 @@ def _normalize_list(value) -> list[str]:
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
     return []
+
+
+def _build_supporting_cards(role: str, title: str, body: str, emphasis: list[str], density: str) -> list[dict]:
+    sentences = _extract_sentences(body)
+    cards: list[dict] = []
+
+    if role == "hook":
+        cards.append({"label": "Core", "text": emphasis[0] if emphasis else title})
+        if sentences:
+            cards.append({"label": "Tension", "text": sentences[0]})
+    elif role == "context":
+        cards.append({"label": "Why now", "text": sentences[0] if sentences else body})
+        if len(sentences) > 1:
+            cards.append({"label": "Pressure", "text": sentences[1]})
+    elif role == "proof":
+        cards.append({"label": "Signal", "text": emphasis[0] if emphasis else title})
+        if sentences:
+            cards.append({"label": "Evidence", "text": sentences[0]})
+    elif role == "example":
+        cards.append({"label": "Case", "text": title})
+        if sentences:
+            cards.append({"label": "Observed", "text": sentences[0]})
+    elif role == "checklist":
+        chunks = _extract_phrases(body, limit=3)
+        for idx, chunk in enumerate(chunks, start=1):
+            cards.append({"label": f"Step {idx}", "text": chunk})
+    elif role == "cta":
+        cards.append({"label": "Next", "text": sentences[0] if sentences else body})
+    else:
+        cards.append({"label": "Key", "text": emphasis[0] if emphasis else title})
+        if density in {"medium", "high"} and sentences:
+            cards.append({"label": "Angle", "text": sentences[0]})
+        if density == "high" and len(sentences) > 1:
+            cards.append({"label": "Detail", "text": sentences[1]})
+
+    deduped: list[dict] = []
+    seen = set()
+    for card in cards:
+        text = _trim_text(card["text"], 52)
+        if not text:
+            continue
+        key = (card["label"], text)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append({"label": card["label"], "text": text})
+    return deduped[:3]
+
+
+def _extract_sentences(text: str) -> list[str]:
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return [_trim_text(part.strip(), 60) for part in parts if part.strip()]
+
+
+def _extract_phrases(text: str, limit: int) -> list[str]:
+    parts = re.split(r"[,;]\s+|(?<=[.!?])\s+", text.strip())
+    return [_trim_text(part.strip(), 44) for part in parts if part.strip()][:limit]
+
+
+def _trim_text(text: str, limit: int) -> str:
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"

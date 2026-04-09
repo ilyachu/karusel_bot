@@ -165,7 +165,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
 
     analysis = await analyze_text_and_propose_slides(text)
     recommended = analysis.get("recommended_slides", 6)
-    target_slides = max(5, min(7, recommended))
+    target_slides = max(4, min(7, recommended))
 
     raw_plan = await generate_instagram_carousel_plan(text, target_slides)
     if raw_plan:

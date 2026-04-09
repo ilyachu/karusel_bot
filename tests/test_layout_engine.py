@@ -58,6 +58,22 @@ class LayoutEngineTests(unittest.TestCase):
         self.assertEqual(specs[-1].variant, "closing")
         self.assertTrue(all(spec.theme == "business_dark" for spec in specs))
 
+    def test_supporting_cards_stay_within_zero_to_three_items(self):
+        plan = build_fallback_instagram_plan(
+            [
+                {"title": "Поговорим про память", "body": "Контекстное окно растет. Задачи растут быстрее."},
+                {"title": "Почему тема болит", "body": "Проекты длиннее, цепочки сложнее, а договоренности уже не помещаются в один чат."},
+                {"title": "Что делать", "body": "Сохрани пост и вернись к нему позже."},
+            ],
+            theme_hint="memory_archive",
+        )
+        specs = build_instagram_layout_specs(plan)
+
+        self.assertTrue(all(0 <= len(spec.supporting_cards) <= 3 for spec in specs))
+        self.assertGreaterEqual(len(specs[0].supporting_cards), 1)
+        self.assertGreaterEqual(len(specs[1].supporting_cards), 1)
+        self.assertEqual(len(specs[-1].supporting_cards), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
