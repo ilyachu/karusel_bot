@@ -48,6 +48,39 @@ THEME_TOKENS = {
         "display_font": "Georgia, 'Times New Roman', serif",
         "body_font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     },
+    "founder_brief": {
+        "bg": "radial-gradient(circle at top left, rgba(99,102,241,0.18), transparent 26%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)",
+        "panel": "rgba(255,255,255,0.78)",
+        "text": "#0f172a",
+        "muted": "#475569",
+        "accent": "#4f46e5",
+        "chip": "rgba(79,70,229,0.08)",
+        "line": "rgba(79,70,229,0.08)",
+        "display_font": "'Arial Black', 'Segoe UI', sans-serif",
+        "body_font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    },
+    "growth_black": {
+        "bg": "radial-gradient(circle at top right, rgba(163,230,53,0.26), transparent 24%), linear-gradient(180deg, #030712 0%, #111827 100%)",
+        "panel": "rgba(3,7,18,0.84)",
+        "text": "#f9fafb",
+        "muted": "#d1d5db",
+        "accent": "#a3e635",
+        "chip": "rgba(163,230,53,0.10)",
+        "line": "rgba(255,255,255,0.06)",
+        "display_font": "'Arial Black', 'Trebuchet MS', sans-serif",
+        "body_font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    },
+    "research_mono": {
+        "bg": "linear-gradient(180deg, #f7f7f5 0%, #ecece8 100%)",
+        "panel": "rgba(255,255,255,0.80)",
+        "text": "#111827",
+        "muted": "#374151",
+        "accent": "#111827",
+        "chip": "rgba(17,24,39,0.06)",
+        "line": "rgba(17,24,39,0.08)",
+        "display_font": "'SFMono-Regular', 'Menlo', 'Monaco', monospace",
+        "body_font": "'SFMono-Regular', 'Menlo', 'Monaco', monospace",
+    },
 }
 
 FONT_MAP = {
@@ -112,8 +145,8 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       inset: {_frame_inset(spec.variant)};
       border-radius: 42px;
       background: {tokens["panel"]};
-      border: 1px solid rgba(255,255,255,0.09);
-      box-shadow: 0 18px 80px rgba(0,0,0,0.22);
+      border: 1px solid {_frame_border(tokens, spec.theme)};
+      box-shadow: {_frame_shadow(spec.theme)};
       padding: {_frame_padding(spec.variant)};
       display: flex;
       flex-direction: column;
@@ -141,7 +174,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       align-items: center;
       min-height: 46px;
       padding: 0 18px;
-      border-radius: 999px;
+      border-radius: {("12px" if spec.theme == "research_mono" else "999px")};
       background: {tokens["chip"]};
       font-size: 20px;
       line-height: 1;
@@ -180,7 +213,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     .divider {{
       width: 180px;
       height: 8px;
-      border-radius: 999px;
+      border-radius: {("12px" if spec.theme == "research_mono" else "999px")};
       background: {tokens["accent"]};
       position: relative;
       z-index: 1;
@@ -197,7 +230,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       align-items: center;
       min-height: 40px;
       padding: 0 16px;
-      border-radius: 999px;
+      border-radius: {("12px" if spec.theme == "research_mono" else "999px")};
       background: {tokens["chip"]};
       color: {tokens["accent"]};
       font-size: 18px;
@@ -216,10 +249,10 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     }}
     .support-card {{
       padding: 16px 18px;
-      border-radius: 24px;
+      border-radius: {("12px" if spec.theme == "research_mono" else "24px")};
       background: {(_support_card_bg(tokens, spec.theme))};
-      border: 1px solid rgba(255,255,255,0.14);
-      box-shadow: 0 12px 32px rgba(0,0,0,0.08);
+      border: 1px solid {_support_border(spec.theme)};
+      box-shadow: {_support_shadow(spec.theme)};
       color: {tokens["text"]};
       font-size: 22px;
       line-height: 1.25;
@@ -369,6 +402,10 @@ def _frame_texture(tokens: dict) -> str:
 def _support_card_bg(tokens: dict, theme: str) -> str:
     if theme == "memory_archive":
         return "rgba(255, 248, 238, 0.94)"
+    if theme == "research_mono":
+        return "rgba(255,255,255,0.92)"
+    if theme == "growth_black":
+        return "rgba(17,24,39,0.94)"
     return "rgba(255,255,255,0.06)"
 
 
@@ -384,7 +421,51 @@ def _supporting_cards_style(spec: LayoutSpec) -> str:
 
 def _supporting_transform(spec: LayoutSpec) -> str:
     if spec.theme != "memory_archive":
+        if spec.theme == "founder_brief":
+            return "rotate(-2deg)"
+        if spec.theme == "growth_black":
+            return "rotate(-1deg)"
         return "none"
     if len(spec.supporting_cards) >= 2:
         return "rotate(-4deg)"
     return "none"
+
+
+def _frame_border(tokens: dict, theme: str) -> str:
+    if theme == "research_mono":
+        return "rgba(17,24,39,0.10)"
+    if theme == "growth_black":
+        return "rgba(163,230,53,0.16)"
+    if theme == "founder_brief":
+        return "rgba(79,70,229,0.10)"
+    return "rgba(255,255,255,0.09)"
+
+
+def _frame_shadow(theme: str) -> str:
+    if theme == "founder_brief":
+        return "0 18px 80px rgba(79,70,229,0.10)"
+    if theme == "growth_black":
+        return "0 18px 80px rgba(0,0,0,0.34)"
+    if theme == "research_mono":
+        return "0 14px 48px rgba(17,24,39,0.10)"
+    return "0 18px 80px rgba(0,0,0,0.22)"
+
+
+def _support_border(theme: str) -> str:
+    if theme == "growth_black":
+        return "rgba(163,230,53,0.18)"
+    if theme == "research_mono":
+        return "rgba(17,24,39,0.10)"
+    if theme == "founder_brief":
+        return "rgba(79,70,229,0.12)"
+    return "rgba(255,255,255,0.14)"
+
+
+def _support_shadow(theme: str) -> str:
+    if theme == "growth_black":
+        return "0 12px 32px rgba(0,0,0,0.24)"
+    if theme == "research_mono":
+        return "0 8px 22px rgba(17,24,39,0.08)"
+    if theme == "founder_brief":
+        return "0 10px 28px rgba(79,70,229,0.08)"
+    return "0 12px 32px rgba(0,0,0,0.08)"

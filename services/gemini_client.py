@@ -198,7 +198,7 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
     "goal": "instagram_carousel",
     "audience": "кто читатель",
     "tone": "clear_confident | bold_creator | premium_editorial",
-    "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive",
+    "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive | founder_brief | growth_black | research_mono",
     "cta": "save_and_follow | comment_and_dm | share_and_follow"
   }},
   "slides": [
@@ -209,7 +209,7 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
       "body": "текст слайда",
       "emphasis": ["ключевой акцент", "ещё один акцент"],
       "density": "low | medium | high",
-      "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive"
+      "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive | founder_brief | growth_black | research_mono"
     }}
   ]
 }}
@@ -223,6 +223,11 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
 6. body не длиннее 260 символов.
 7. emphasis — только реальные смысловые акценты из этого слайда.
 8. Не добавляй markdown, комментарии или пояснения.
+9. Выбирай `theme_hint` осознанно по типу контента:
+   - `founder_brief` для коротких founder / product / strategy постов
+   - `growth_black` для growth, performance, marketing, revenue, ops
+   - `research_mono` для research, frameworks, technical explainers
+   - `memory_archive` для memory, knowledge, note-like editorial posts
 """
 
     try:

@@ -17,6 +17,18 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertIn("chu ai", html)
         self.assertIn("<html", html.lower())
 
+    def test_build_slide_html_supports_new_theme_systems(self):
+        for theme in ("founder_brief", "growth_black", "research_mono"):
+            with self.subTest(theme=theme):
+                plan = build_fallback_instagram_plan(
+                    [{"title": "Founder note", "body": "Short strategic brief for the next move."}],
+                    theme_hint=theme,
+                )
+                spec = build_instagram_layout_specs(plan)[0]
+                html = build_slide_html(spec, logo_text="chu ai")
+                self.assertIn("Founder note", html)
+                self.assertIn("<style>", html)
+
 
 if __name__ == "__main__":
     unittest.main()

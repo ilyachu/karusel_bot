@@ -63,6 +63,42 @@ THEME_SYSTEMS = {
             "cta": "Save",
         },
     },
+    "founder_brief": {
+        "font_style": "prosto",
+        "eyebrows": {
+            "hook": "Brief",
+            "context": "Context",
+            "point": "Move",
+            "proof": "Metric",
+            "example": "Case",
+            "checklist": "Plan",
+            "cta": "Next",
+        },
+    },
+    "growth_black": {
+        "font_style": "dela",
+        "eyebrows": {
+            "hook": "Growth",
+            "context": "Constraint",
+            "point": "Lever",
+            "proof": "Signal",
+            "example": "Play",
+            "checklist": "Ops",
+            "cta": "Action",
+        },
+    },
+    "research_mono": {
+        "font_style": "standard",
+        "eyebrows": {
+            "hook": "Research",
+            "context": "Frame",
+            "point": "Finding",
+            "proof": "Evidence",
+            "example": "Example",
+            "checklist": "Protocol",
+            "cta": "Keep",
+        },
+    },
 }
 
 
