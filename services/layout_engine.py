@@ -358,36 +358,53 @@ def _normalize_list(value) -> list[str]:
 
 def _build_supporting_cards(role: str, title: str, body: str, emphasis: list[str], density: str) -> list[dict]:
     sentences = _extract_sentences(body)
+    phrases = _extract_phrases(body, limit=3)
     cards: list[dict] = []
 
     if role == "hook":
-        cards.append({"label": "Главное", "text": emphasis[0] if emphasis else title})
-        if sentences:
-            cards.append({"label": "Почему важно", "text": sentences[0]})
+        if emphasis and len(emphasis[0]) > 12:
+            cards.append({"label": "", "text": emphasis[0]})
+        if phrases:
+            cards.append({"label": "", "text": phrases[0]})
+        elif sentences:
+            cards.append({"label": "", "text": sentences[0]})
     elif role == "context":
-        cards.append({"label": "Контекст", "text": sentences[0] if sentences else body})
-        if len(sentences) > 1:
-            cards.append({"label": "Проблема", "text": sentences[1]})
+        if phrases:
+            cards.append({"label": "", "text": phrases[0]})
+        if len(phrases) > 1:
+            cards.append({"label": "", "text": phrases[1]})
+        elif len(sentences) > 1:
+            cards.append({"label": "", "text": sentences[1]})
     elif role == "proof":
-        cards.append({"label": "Факт", "text": emphasis[0] if emphasis else title})
-        if sentences:
-            cards.append({"label": "Что это даёт", "text": sentences[0]})
+        if phrases:
+            cards.append({"label": "", "text": phrases[0]})
+        if len(phrases) > 1:
+            cards.append({"label": "", "text": phrases[1]})
     elif role == "example":
-        cards.append({"label": "Пример", "text": title})
-        if sentences:
-            cards.append({"label": "Наблюдение", "text": sentences[0]})
+        if phrases:
+            cards.append({"label": "", "text": phrases[0]})
+        if len(phrases) > 1:
+            cards.append({"label": "", "text": phrases[1]})
     elif role == "checklist":
         chunks = _extract_phrases(body, limit=3)
-        for idx, chunk in enumerate(chunks, start=1):
-            cards.append({"label": f"Шаг {idx}", "text": chunk})
+        for chunk in chunks:
+            cards.append({"label": "", "text": chunk})
     elif role == "cta":
-        cards.append({"label": "Итог", "text": sentences[0] if sentences else body})
+        if phrases:
+            cards.append({"label": "", "text": phrases[0]})
+        elif sentences:
+            cards.append({"label": "", "text": sentences[0]})
     else:
-        cards.append({"label": "Суть", "text": emphasis[0] if emphasis else title})
-        if density in {"medium", "high"} and sentences:
-            cards.append({"label": "Почему это интересно", "text": sentences[0]})
-        if density == "high" and len(sentences) > 1:
-            cards.append({"label": "Деталь", "text": sentences[1]})
+        if phrases:
+            cards.append({"label": "", "text": phrases[0]})
+        elif emphasis:
+            cards.append({"label": "", "text": emphasis[0]})
+        if density in {"medium", "high"} and len(phrases) > 1:
+            cards.append({"label": "", "text": phrases[1]})
+        elif density in {"medium", "high"} and len(sentences) > 1:
+            cards.append({"label": "", "text": sentences[1]})
+        if density == "high" and len(phrases) > 2:
+            cards.append({"label": "", "text": phrases[2]})
 
     deduped: list[dict] = []
     seen = set()

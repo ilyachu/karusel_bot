@@ -231,17 +231,9 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       border: 1px solid {_support_border(spec.theme)};
       box-shadow: {_support_shadow(spec.theme)};
       color: {tokens["text"]};
-      font-size: 22px;
-      line-height: 1.25;
+      font-size: 20px;
+      line-height: 1.33;
       font-family: {body_font};
-    }}
-    .support-card strong {{
-      display: block;
-      margin-bottom: 8px;
-      color: {tokens["accent"]};
-      font-size: 16px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
     }}
     .cta-note {{
       display: {("block" if spec.variant == "closing" else "none")};
@@ -360,7 +352,7 @@ def _body_size(variant: str) -> int:
 
 def _secondary_cards(spec: LayoutSpec, tokens: dict) -> str:
     return "".join(
-        f'<div class="support-card"><strong>{html.escape(card["label"])}</strong>{html.escape(card["text"])}</div>'
+        f'<div class="support-card">{html.escape(card["text"])}</div>'
         for card in spec.supporting_cards[:3]
     )
 
