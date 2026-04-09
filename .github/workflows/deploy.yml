@@ -1,0 +1,52 @@
+name: Deploy Bot
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-karusel-bot
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install rsync and sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync sshpass
+
+      - name: Sync project to server
+        env:
+          SSHPASS: ${{ secrets.DEPLOY_SERVER_PASSWORD }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_SERVER_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_SERVER_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_SERVER_PATH }}
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.env' \
+            --exclude 'data' \
+            --exclude 'output' \
+            --exclude '.venv' \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
+
+      - name: Rebuild and restart bot
+        env:
+          SSHPASS: ${{ secrets.DEPLOY_SERVER_PASSWORD }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_SERVER_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_SERVER_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_SERVER_PATH }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd ${DEPLOY_PATH} && docker compose up -d --build && docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | grep karusel_bot"
