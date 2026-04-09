@@ -60,7 +60,7 @@ class LayoutEngineTests(unittest.TestCase):
         self.assertEqual(specs[-1].variant, "closing")
         self.assertTrue(all(spec.theme == "business_dark" for spec in specs))
 
-    def test_supporting_cards_stay_within_zero_to_three_items(self):
+    def test_supporting_cards_are_disabled_for_insta_auto_layout(self):
         plan = build_fallback_instagram_plan(
             [
                 {"title": "Поговорим про память", "body": "Контекстное окно растет. Задачи растут быстрее."},
@@ -71,8 +71,8 @@ class LayoutEngineTests(unittest.TestCase):
         )
         specs = build_instagram_layout_specs(plan)
 
-        self.assertTrue(all(0 <= len(spec.supporting_cards) <= 2 for spec in specs))
-        self.assertTrue(all(card["label"] == "" for spec in specs for card in spec.supporting_cards))
+        self.assertTrue(all(spec.supporting_cards == [] for spec in specs))
+        self.assertTrue(all(spec.badge_text == "" for spec in specs))
 
     def test_theme_selection_policy_prefers_memory_archive_for_memory_posts(self):
         plan = build_fallback_instagram_plan(

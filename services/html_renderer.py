@@ -103,13 +103,10 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     logo = html.escape(logo_text)
     progress = f"{spec.slide_index}/{spec.total_slides}" if spec.show_progress else ""
 
-    cards = _secondary_cards(spec, tokens)
-
     title_size = _title_size(spec.variant)
     body_size = _body_size(spec.variant)
     title_max_width = "620px" if spec.theme == "memory_archive" and spec.variant not in {"cover", "closing"} else "860px"
     body_max_width = "600px" if spec.theme == "memory_archive" and spec.variant not in {"cover", "closing"} else "840px"
-    supporting_style = _supporting_cards_style(spec)
 
     return f"""<!DOCTYPE html>
 <html lang="ru">
@@ -218,26 +215,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       z-index: 1;
     }}
     .supporting-cards {{
-      position: absolute;
-      {supporting_style}
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      width: 220px;
-      z-index: 0;
-      transform: {(_supporting_transform(spec))};
-      opacity: {("1" if cards else "0")};
-    }}
-    .support-card {{
-      padding: 14px 16px;
-      border-radius: {("12px" if spec.theme == "research_mono" else "24px")};
-      background: {(_support_card_bg(tokens, spec.theme))};
-      border: 1px solid {_support_border(spec.theme)};
-      box-shadow: {_support_shadow(spec.theme)};
-      color: {tokens["text"]};
-      font-size: 18px;
-      line-height: 1.3;
-      font-family: {body_font};
+      display: none;
     }}
     .cta-note {{
       display: {("block" if spec.variant == "closing" else "none")};
@@ -267,17 +245,15 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
   </style>
 </head>
 <body>
-  <div class="canvas">
-    <div class="frame">
+    <div class="canvas">
+      <div class="frame">
       <div class="topbar">
-        <div class="badge">{badge}</div>
         <div class="progress">{progress}</div>
       </div>
       <div class="title">{title}</div>
       <div class="divider"></div>
       <div class="body">{body}</div>
       <div class="cta-note">Сохрани пост и вернись к нему позже.</div>
-      <div class="supporting-cards">{cards}</div>
     </div>
     <div class="footer">
       <div class="note">Листай дальше</div>
@@ -354,13 +330,6 @@ def _body_size(variant: str) -> int:
     }.get(variant, 28)
 
 
-def _secondary_cards(spec: LayoutSpec, tokens: dict) -> str:
-    return "".join(
-        f'<div class="support-card">{html.escape(card["text"])}</div>'
-        for card in spec.supporting_cards[:3]
-    )
-
-
 def _background_lines(tokens: dict) -> str:
     line = tokens.get("line", "rgba(0,0,0,0.05)")
     return f"linear-gradient({line} 1px, transparent 1px), linear-gradient(90deg, {line} 1px, transparent 1px)"
@@ -368,38 +337,6 @@ def _background_lines(tokens: dict) -> str:
 
 def _frame_texture(tokens: dict) -> str:
     return f"linear-gradient(180deg, rgba(255,255,255,0.28), transparent 22%), radial-gradient(circle at top left, {tokens['chip']}, transparent 40%)"
-
-
-def _support_card_bg(tokens: dict, theme: str) -> str:
-    if theme == "memory_archive":
-        return "rgba(255, 248, 238, 0.94)"
-    if theme == "research_mono":
-        return "rgba(255,255,255,0.92)"
-    if theme == "growth_black":
-        return "rgba(17,24,39,0.94)"
-    return "rgba(255,255,255,0.06)"
-
-
-def _supporting_cards_style(spec: LayoutSpec) -> str:
-    if spec.theme != "memory_archive":
-        return "right: 34px; bottom: 42px;"
-    if spec.variant == "cover":
-        return "right: 34px; bottom: 42px;"
-    if spec.variant == "closing":
-        return "right: 34px; bottom: 42px;"
-    return "right: 34px; top: 300px;"
-
-
-def _supporting_transform(spec: LayoutSpec) -> str:
-    if spec.theme != "memory_archive":
-        if spec.theme == "founder_brief":
-            return "rotate(-2deg)"
-        if spec.theme == "growth_black":
-            return "rotate(-1deg)"
-        return "none"
-    if len(spec.supporting_cards) >= 2:
-        return "rotate(-4deg)"
-    return "none"
 
 
 def _frame_border(tokens: dict, theme: str) -> str:

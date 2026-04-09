@@ -203,13 +203,13 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
                 font_style=theme_system["font_style"],
                 variant=variant,
                 text_position=text_position,
-                badge_text=_badge_text_for_role(theme_system["eyebrows"].get(slide.role, ""), slide.role),
+                badge_text="",
                 title=slide.title,
                 body=slide.body,
                 highlight_words=slide.emphasis,
                 density=slide.density,
                 show_progress=total_slides > 1,
-                supporting_cards=_build_supporting_cards(slide.role, slide.title, slide.body, slide.emphasis, slide.density),
+                supporting_cards=[],
             )
         )
     return specs
@@ -356,45 +356,6 @@ def _normalize_list(value) -> list[str]:
     return []
 
 
-def _build_supporting_cards(role: str, title: str, body: str, emphasis: list[str], density: str) -> list[dict]:
-    sentences = _extract_sentences(body)
-    phrases = _extract_phrases(body, limit=3)
-    cards: list[dict] = []
-
-    if role == "hook":
-        if emphasis and _not_duplicate(emphasis[0], title, body):
-            cards.append({"label": "", "text": emphasis[0]})
-        elif phrases and _not_duplicate(phrases[0], title, body):
-            cards.append({"label": "", "text": phrases[0]})
-    elif role == "checklist":
-        chunks = _extract_phrases(body, limit=2)
-        for chunk in chunks:
-            if _not_duplicate(chunk, title, body):
-                cards.append({"label": "", "text": chunk})
-    elif role == "cta":
-        if phrases and _not_duplicate(phrases[0], title, body):
-            cards.append({"label": "", "text": phrases[0]})
-    elif role == "proof" and density == "high":
-        if len(phrases) > 1 and _not_duplicate(phrases[1], title, body):
-            cards.append({"label": "", "text": phrases[1]})
-    elif role == "example":
-        if len(phrases) > 1 and _not_duplicate(phrases[1], title, body):
-            cards.append({"label": "", "text": phrases[1]})
-
-    deduped: list[dict] = []
-    seen = set()
-    for card in cards:
-        text = _trim_text(card["text"], 34)
-        if not text:
-            continue
-        key = (card["label"], text)
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append({"label": card["label"], "text": text})
-    return deduped[:2]
-
-
 def _extract_sentences(text: str) -> list[str]:
     parts = re.split(r"(?<=[.!?])\s+", text.strip())
     return [_trim_text(part.strip(), 60) for part in parts if part.strip()]
@@ -410,27 +371,6 @@ def _trim_text(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 1].rstrip() + "…"
-
-
-def _not_duplicate(candidate: str, title: str, body: str) -> bool:
-    normalized = candidate.strip().lower()
-    if not normalized:
-        return False
-    title_norm = title.strip().lower()
-    body_norm = body.strip().lower()
-    if normalized == title_norm:
-        return False
-    if normalized in body_norm and len(normalized) > 12:
-        return False
-    return True
-
-
-def _badge_text_for_role(label: str, role: str) -> str:
-    # Keep only distinctive cover/checklist markers; regular editorial slides
-    # should not look like system cards.
-    if role in {"hook", "checklist"}:
-        return label
-    return ""
 
 
 def _score_themes(source_text: str, plan: CarouselPlan) -> dict[str, int]:
