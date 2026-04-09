@@ -101,6 +101,14 @@ THEME_SYSTEMS = {
     },
 }
 
+THEME_LABELS = {
+    "auto": "🧠 Auto",
+    "memory_archive": "🗂 Memory Archive",
+    "founder_brief": "📌 Founder Brief",
+    "growth_black": "📈 Growth Black",
+    "research_mono": "🔬 Research Mono",
+}
+
 THEME_KEYWORDS = {
     "memory_archive": [
         "memory", "mempalace", "памят", "контекст", "chat", "чаты",
@@ -205,6 +213,21 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
             )
         )
     return specs
+
+
+def apply_theme_override(plan: CarouselPlan, theme_name: str) -> tuple[CarouselPlan, ThemeDecision]:
+    selected = theme_name if theme_name in THEME_SYSTEMS else plan.theme_hint
+    updated_plan = replace(
+        plan,
+        theme_hint=selected,
+        slides=[replace(slide, theme_hint=selected) for slide in plan.slides],
+    )
+    return updated_plan, ThemeDecision(
+        selected_theme=selected,
+        proposed_theme=plan.theme_hint,
+        scores={},
+        reason=f"Theme lock forced `{selected}`.",
+    )
 
 
 def apply_theme_selection_policy(plan: CarouselPlan, source_text: str) -> tuple[CarouselPlan, ThemeDecision]:

@@ -95,6 +95,16 @@ This makes the system more stable for recurring post types like:
 - research/framework
 - memory/knowledge
 
+### Theme override / lock
+
+`Insta Auto` also supports a manual theme lock before generation.
+
+Current behavior:
+- default mode is `Auto`
+- the user can lock a specific theme in Telegram before sending the post
+- when locked, policy is bypassed and the selected theme is enforced
+- the final decision is still stored in export metadata
+
 ### What remains
 
 - visual QA across more real posts

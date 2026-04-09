@@ -5,12 +5,24 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from utils.database import get_user_logo, set_user_logo, reset_user_logo
 from utils.states import CarouselFlow
+from services.layout_engine import THEME_LABELS
 from config import ADMIN_ID
 
 class Settings(StatesGroup):
     waiting_for_logo = State()
 
 router = Router()
+
+
+def build_insta_theme_keyboard(selected: str = "auto") -> InlineKeyboardMarkup:
+    options = ["auto", "memory_archive", "founder_brief", "growth_black", "research_mono"]
+    rows = []
+    for option in options:
+        label = THEME_LABELS[option]
+        if option == selected:
+            label = f"✅ {label}"
+        rows.append([InlineKeyboardButton(text=label, callback_data=f"insta_theme:{option}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -42,11 +54,32 @@ async def cmd_create_carousel(message: types.Message, state: FSMContext):
 @router.message(F.text == "🚀 Insta Auto")
 async def cmd_insta_auto(message: types.Message, state: FSMContext):
     await state.clear()
+    await state.update_data(insta_theme_override="auto")
     await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
     await message.answer(
         "🚀 Insta Auto включен.\n\n"
         "Отправьте текст, голосовое или перешлите пост. Я сам соберу Instagram-ready карусель, "
-        "подготовлю caption и export-пакет."
+        "подготовлю caption и export-пакет.\n\n"
+        "Тема сейчас: `Auto`. Можно зафиксировать стиль до отправки текста.",
+        reply_markup=build_insta_theme_keyboard(),
+        parse_mode="Markdown",
+    )
+
+
+@router.callback_query(CarouselFlow.insta_auto_waiting_for_text, F.data.startswith("insta_theme:"))
+async def insta_theme_selected(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    theme = callback.data.split(":", 1)[1]
+    if theme not in THEME_LABELS:
+        return
+    await state.update_data(insta_theme_override=theme)
+    await callback.message.edit_text(
+        "🚀 Insta Auto включен.\n\n"
+        "Отправьте текст, голосовое или перешлите пост. Я сам соберу Instagram-ready карусель, "
+        "подготовлю caption и export-пакет.\n\n"
+        f"Тема сейчас: `{THEME_LABELS[theme]}`.",
+        reply_markup=build_insta_theme_keyboard(theme),
+        parse_mode="Markdown",
     )
 
 @router.message(Command("cancel"))

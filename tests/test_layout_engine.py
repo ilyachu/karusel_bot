@@ -2,6 +2,7 @@ import unittest
 
 from services.layout_engine import (
     apply_theme_selection_policy,
+    apply_theme_override,
     build_fallback_instagram_plan,
     build_instagram_layout_specs,
     parse_carousel_plan,
@@ -107,6 +108,16 @@ class LayoutEngineTests(unittest.TestCase):
         )
         selected, _ = apply_theme_selection_policy(plan, "Фаундер, продукт, стратегия, roadmap и запуск")
         self.assertEqual(selected.theme_hint, "founder_brief")
+
+    def test_theme_override_forces_selected_theme(self):
+        plan = build_fallback_instagram_plan(
+            [{"title": "Growth memo", "body": "CAC, ROMI, трафик и performance marketing."}],
+            theme_hint="business_dark",
+        )
+        selected, decision = apply_theme_override(plan, "research_mono")
+        self.assertEqual(selected.theme_hint, "research_mono")
+        self.assertEqual(decision.selected_theme, "research_mono")
+        self.assertIn("forced", decision.reason)
 
 
 if __name__ == "__main__":

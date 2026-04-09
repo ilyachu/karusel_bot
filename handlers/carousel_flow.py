@@ -23,7 +23,9 @@ from services.gemini_client import (
 )
 from services.instagram_package import build_instagram_export
 from services.layout_engine import (
+    THEME_LABELS,
     apply_theme_selection_policy,
+    apply_theme_override,
     build_fallback_instagram_plan,
     build_instagram_layout_specs,
     parse_carousel_plan,
@@ -184,11 +186,12 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
 
     if not raw_plan:
         carousel_plan = build_fallback_instagram_plan(slides_content)
-        theme_decision = None
+    data = await state.get_data()
+    theme_override = data.get("insta_theme_override", "auto")
+    if theme_override and theme_override != "auto":
+        carousel_plan, theme_decision = apply_theme_override(carousel_plan, theme_override)
     else:
-        theme_decision = None
-
-    carousel_plan, theme_decision = apply_theme_selection_policy(carousel_plan, text)
+        carousel_plan, theme_decision = apply_theme_selection_policy(carousel_plan, text)
 
     caption = await generate_instagram_caption(text, slides_content)
     user_logo = get_user_logo(message.chat.id)
@@ -244,6 +247,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         "✅ Insta-ready карусель готова.\n\n"
         f"Слайдов: {len(slides_content)}\n"
         f"Тема: {carousel_plan.theme_hint}\n"
+        f"Theme mode: {THEME_LABELS.get(theme_override, '🧠 Auto')}\n"
         f"Тон: {carousel_plan.tone}\n"
         f"Policy: {theme_decision.reason}\n"
         f"Рендер: {render_mode}\n"
