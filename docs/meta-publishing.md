@@ -44,6 +44,7 @@ The export package is the publish boundary:
 - slides are already rendered
 - caption is already written
 - metadata already contains plan/layout/theme context
+- export package must be publicly reachable via `EXPORT_PUBLIC_BASE_URL`
 
 The Meta layer should consume that package, not rebuild content from Telegram
 history.

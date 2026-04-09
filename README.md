@@ -27,6 +27,7 @@ It also includes an `Insta Auto` mode that generates an Instagram-ready carousel
     - `ADMIN_ID`: Telegram user ID with admin access
     - `DATA_DIR`: optional, defaults to `data`
     - `EXPORTS_DIR`: optional, defaults to `data/exports`
+    - `EXPORT_PUBLIC_BASE_URL`: public base URL that serves the export packages
     - `META_*`: optional for now, used to prepare the future Instagram publish layer
 
 3.  **Fonts**:
@@ -62,6 +63,7 @@ not rely only on the LLM to decide whether a post should render as
 
 The repo now reserves env placeholders for the future Instagram publishing
 layer. No real keys are required yet, but the expected config contract is:
+- `EXPORT_PUBLIC_BASE_URL`
 - `META_APP_ID`
 - `META_APP_SECRET`
 - `META_REDIRECT_URI`

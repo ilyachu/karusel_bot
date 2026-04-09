@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import secrets
 from datetime import datetime, timezone
 from io import BytesIO
 
@@ -23,6 +24,7 @@ def build_instagram_export(
     now_utc = datetime.now(timezone.utc)
     timestamp = now_utc.strftime("%Y%m%d-%H%M%S")
     slug = _slugify(source_text[:60]) or "carousel"
+    export_id = secrets.token_hex(6)
     export_dir = os.path.join(EXPORTS_DIR, f"{timestamp}-{chat_id}-{slug}")
     os.makedirs(export_dir, exist_ok=True)
 
@@ -36,6 +38,8 @@ def build_instagram_export(
         f.write(caption.strip() + "\n")
 
     metadata = {
+        "export_id": export_id,
+        "export_slug": os.path.basename(export_dir),
         "created_at_utc": now_utc.isoformat(),
         "chat_id": chat_id,
         "slides_count": len(slides),

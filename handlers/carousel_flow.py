@@ -1,4 +1,5 @@
 import asyncio
+import json
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
@@ -13,7 +14,12 @@ import logging
 import os
 from io import BytesIO
 from dataclasses import asdict
-from utils.database import get_user_logo
+from utils.database import (
+    create_meta_publish_job,
+    get_export_package,
+    get_user_logo,
+    save_export_package,
+)
 
 from services.gemini_client import (
     analyze_text_and_propose_slides,
@@ -21,6 +27,7 @@ from services.gemini_client import (
     generate_instagram_carousel_plan,
     generate_instagram_caption,
 )
+from services.export_hosting import build_public_export_info
 from services.instagram_package import build_instagram_export
 from services.layout_engine import (
     THEME_LABELS,
@@ -31,6 +38,7 @@ from services.layout_engine import (
     parse_carousel_plan,
 )
 from services.html_renderer import browser_binaries_hint, render_layout_spec_html
+from services.meta_publish import MetaCredentials, build_carousel_publish_plan, load_export_package
 from services.openai_speech import transcribe_voice
 from services.fal_client import generate_background
 from services.image_renderer import render_layout_spec, render_slide
@@ -238,9 +246,25 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             "theme_decision": theme_decision.to_dict() if theme_decision else None,
         },
     )
+    export_package = load_export_package(export_dir)
+    export_metadata = export_package.metadata
+    export_id = export_metadata["export_id"]
+    save_export_package(
+        export_id=export_id,
+        chat_id=message.chat.id,
+        export_dir=export_dir,
+        export_slug=export_metadata["export_slug"],
+        theme=carousel_plan.theme_hint,
+        render_mode=render_mode,
+    )
 
     await status.delete()
     await message.answer_media_group(media_group)
+    actions = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🛰 Prepare Meta Publish", callback_data=f"meta_prepare:{export_id}")]
+        ]
+    )
 
     caption_preview = caption if len(caption) <= 1200 else caption[:1200] + "..."
     await message.answer(
@@ -253,10 +277,79 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         f"Рендер: {render_mode}\n"
         f"Export: {export_dir}\n\n"
         f"Caption:\n{caption_preview}",
+        reply_markup=actions,
     )
     if render_mode != "html":
         await message.answer(browser_binaries_hint())
     await state.clear()
+
+
+@router.callback_query(F.data.startswith("meta_prepare:"))
+async def meta_prepare_publish(callback: types.CallbackQuery):
+    await callback.answer()
+    export_id = callback.data.split(":", 1)[1]
+    export_record = get_export_package(export_id)
+    if not export_record:
+        await callback.message.answer("⚠️ Export package не найден. Сгенерируйте карусель заново.")
+        return
+
+    try:
+        public_info = build_public_export_info(export_record["export_dir"])
+    except Exception as exc:
+        await callback.message.answer(
+            "⚠️ Не могу подготовить Meta publish без public hosting.\n\n"
+            f"Причина: {exc}\n"
+            "Нужно задать `EXPORT_PUBLIC_BASE_URL` и раздавать export-пакеты по публичному URL."
+        )
+        return
+
+    plan = build_carousel_publish_plan(
+        export_dir=export_record["export_dir"],
+        public_base_url=public_info.public_base_url,
+        credentials=MetaCredentials(
+            ig_user_id="<IG_USER_ID>",
+            access_token="<ACCESS_TOKEN>",
+        ),
+    )
+    plan_json = json.dumps(
+        {
+            "public_export": {
+                "export_id": public_info.export_id,
+                "export_slug": public_info.export_slug,
+                "slide_urls": public_info.slide_urls,
+                "caption_url": public_info.caption_url,
+                "metadata_url": public_info.metadata_url,
+            },
+            "publish_plan": {
+                "child_requests": [
+                    upload.request.payload for upload in plan.media_uploads
+                ],
+                "carousel_request": plan.create_carousel_request.payload,
+                "publish_request": plan.publish_request.payload,
+                "polling": {
+                    "interval_seconds": plan.poll_carousel_plan.interval_seconds,
+                    "max_attempts": plan.poll_carousel_plan.max_attempts,
+                },
+            },
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    job_id = create_meta_publish_job(
+        export_id=export_id,
+        status="prepared_without_credentials",
+        plan_json=plan_json,
+    )
+
+    await callback.message.answer(
+        "🛰 Meta publish prepared.\n\n"
+        f"Export ID: {public_info.export_id}\n"
+        f"Job ID: {job_id}\n"
+        f"Slides: {len(public_info.slide_urls)}\n"
+        f"Public base: {public_info.public_base_url}\n"
+        f"First slide URL: {public_info.slide_urls[0]}\n\n"
+        "Следующий шаг: подключить Meta account и подставить реальные `IG_USER_ID` + `ACCESS_TOKEN`."
+    )
 
 # --- 3. Analysis & Slide Count Selection ---
 

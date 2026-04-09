@@ -9,6 +9,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 FAL_KEY = os.getenv("FAL_KEY")
 DATA_DIR = os.getenv("DATA_DIR", "data")
 EXPORTS_DIR = os.getenv("EXPORTS_DIR", os.path.join(DATA_DIR, "exports"))
+EXPORT_PUBLIC_BASE_URL = os.getenv("EXPORT_PUBLIC_BASE_URL", "")
 
 admin_id = os.getenv("ADMIN_ID")
 try:

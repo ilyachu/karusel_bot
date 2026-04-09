@@ -53,6 +53,7 @@ OPENAI_API_KEY=your_key_here
 ADMIN_ID=your_telegram_user_id
 DATA_DIR=data
 EXPORTS_DIR=data/exports
+EXPORT_PUBLIC_BASE_URL=https://your-public-host.example/exports
 META_APP_ID=
 META_APP_SECRET=
 META_REDIRECT_URI=

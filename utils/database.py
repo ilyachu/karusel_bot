@@ -30,6 +30,25 @@ def init_db():
                 user_id INTEGER PRIMARY KEY,
                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS export_packages (
+                export_id TEXT PRIMARY KEY,
+                chat_id INTEGER NOT NULL,
+                export_dir TEXT NOT NULL,
+                export_slug TEXT NOT NULL,
+                theme TEXT DEFAULT NULL,
+                render_mode TEXT DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS meta_publish_jobs (
+                job_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                export_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                plan_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(export_id) REFERENCES export_packages(export_id)
+            );
         ''')
         
         conn.commit()
@@ -152,3 +171,85 @@ def get_all_allowed_users():
     except Exception as e:
         logging.error(f"Error getting allowed users: {e}")
         return []
+
+
+def save_export_package(
+    export_id: str,
+    chat_id: int,
+    export_dir: str,
+    export_slug: str,
+    theme: str | None,
+    render_mode: str | None,
+):
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            INSERT INTO export_packages (export_id, chat_id, export_dir, export_slug, theme, render_mode)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(export_id) DO UPDATE SET
+                chat_id = excluded.chat_id,
+                export_dir = excluded.export_dir,
+                export_slug = excluded.export_slug,
+                theme = excluded.theme,
+                render_mode = excluded.render_mode
+            ''',
+            (export_id, chat_id, export_dir, export_slug, theme, render_mode),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logging.error(f"Error saving export package {export_id}: {e}")
+        return False
+
+
+def get_export_package(export_id: str) -> dict | None:
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            SELECT export_id, chat_id, export_dir, export_slug, theme, render_mode, created_at
+            FROM export_packages
+            WHERE export_id = ?
+            ''',
+            (export_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return {
+            "export_id": row[0],
+            "chat_id": row[1],
+            "export_dir": row[2],
+            "export_slug": row[3],
+            "theme": row[4],
+            "render_mode": row[5],
+            "created_at": row[6],
+        }
+    except Exception as e:
+        logging.error(f"Error reading export package {export_id}: {e}")
+        return None
+
+
+def create_meta_publish_job(export_id: str, status: str, plan_json: str) -> int | None:
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            INSERT INTO meta_publish_jobs (export_id, status, plan_json)
+            VALUES (?, ?, ?)
+            ''',
+            (export_id, status, plan_json),
+        )
+        job_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return job_id
+    except Exception as e:
+        logging.error(f"Error creating meta publish job for export {export_id}: {e}")
+        return None
