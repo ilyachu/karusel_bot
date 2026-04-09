@@ -2,13 +2,17 @@ import google.generativeai as genai
 import json
 import os
 import logging
-from config import GEMINI_API_KEY
+from openai import AsyncOpenAI
+
+from config import GEMINI_API_KEY, OPENAI_API_KEY
 
 genai.configure(api_key=GEMINI_API_KEY)
+openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 # Use a model that supports JSON response if possible, or instruct it carefully.
 # gemini-1.5-flash is faster and cheaper.
 MODEL_NAME = "gemini-2.5-flash"
+OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-4o-mini")
 
 async def analyze_text_and_propose_slides(text: str) -> dict:
     """
@@ -54,7 +58,26 @@ async def analyze_text_and_propose_slides(text: str) -> dict:
         return json.loads(text_response)
     except Exception as e:
         logging.error(f"Error in analyze_text_and_propose_slides: {e}")
-        # Fallback structure if JSON fails or model error
+        fallback_prompt = f"""
+        Ты — профессиональный контент-мейкер. Проанализируй текст и предложи структуру карусели.
+
+        Входной текст:
+        {text}
+
+        Верни строго JSON:
+        {{
+          "recommended_slides": int,
+          "slides_plan": [
+            {{ "slide_index": 1, "title": "Заголовок слайда", "summary": "Краткое описание идеи слайда" }}
+          ]
+        }}
+        """
+        try:
+            result = await _openai_json_request(fallback_prompt)
+            if "recommended_slides" in result and "slides_plan" in result:
+                return result
+        except Exception as fallback_error:
+            logging.error(f"OpenAI fallback failed in analyze_text_and_propose_slides: {fallback_error}")
         return {
             "recommended_slides": 1,
             "slides_plan": [{"slide_index": 1, "title": "Ошибка анализа", "summary": "Не удалось проанализировать текст."}]
@@ -133,9 +156,27 @@ async def generate_final_slides(base_text: str, target_slides_count: int, rewrit
         return json.loads(text_response)
     except Exception as e:
         logging.error(f"Error in generate_final_slides: {e}")
-        # Log the raw response for debugging
-        if 'response' in locals():
-            logging.error(f"Raw response: {response.text}")
+        fallback_prompt = f"""Ты — редактор слайдов. Напиши финальный текст для карусели из {target_slides_count} слайдов.
+
+Исходный текст:
+{base_text}
+
+Стиль: {instruction}
+
+Верни строго JSON-объект:
+{{
+  "slides": [
+    {{ "title": "Заголовок слайда", "body": "Текст слайда..." }}
+  ]
+}}
+"""
+        try:
+            result = await _openai_json_request(fallback_prompt)
+            slides = result.get("slides", [])
+            if isinstance(slides, list):
+                return slides
+        except Exception as fallback_error:
+            logging.error(f"OpenAI fallback failed in generate_final_slides: {fallback_error}")
         return []
 
 
@@ -175,7 +216,11 @@ async def generate_instagram_caption(base_text: str, slides_content: list[dict])
         return response.text.strip()
     except Exception as e:
         logging.error(f"Error in generate_instagram_caption: {e}")
-        return "Сохрани этот пост, чтобы вернуться к нему позже.\n\n#instagram #carousel #content #marketing #telegram"
+        try:
+            return await _openai_text_request(prompt)
+        except Exception as fallback_error:
+            logging.error(f"OpenAI fallback failed in generate_instagram_caption: {fallback_error}")
+            return "Сохрани этот пост, чтобы вернуться к нему позже.\n\n#instagram #carousel #content #marketing #telegram"
 
 
 async def generate_instagram_carousel_plan(base_text: str, target_slides_count: int) -> dict:
@@ -245,4 +290,59 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
         return json.loads(text_response)
     except Exception as e:
         logging.error(f"Error in generate_instagram_carousel_plan: {e}")
-        return {}
+        fallback_prompt = f"""Ты — контент-стратег Instagram-каруселей.
+
+Собери строго JSON-план карусели из {target_slides_count} слайдов по исходному тексту:
+{base_text}
+
+Формат:
+{{
+  "carousel": {{
+    "goal": "instagram_carousel",
+    "audience": "кто читатель",
+    "tone": "clear_confident | bold_creator | premium_editorial",
+    "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive | founder_brief | growth_black | research_mono",
+    "cta": "save_and_follow | comment_and_dm | share_and_follow"
+  }},
+  "slides": [
+    {{
+      "index": 1,
+      "role": "hook | context | point | proof | example | checklist | cta",
+      "title": "короткий заголовок",
+      "body": "текст слайда",
+      "emphasis": ["ключевой акцент"],
+      "density": "low | medium | high",
+      "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive | founder_brief | growth_black | research_mono"
+    }}
+  ]
+}}
+"""
+        try:
+            return await _openai_json_request(fallback_prompt)
+        except Exception as fallback_error:
+            logging.error(f"OpenAI fallback failed in generate_instagram_carousel_plan: {fallback_error}")
+            return {}
+
+
+async def _openai_json_request(prompt: str) -> dict:
+    response = await openai_client.chat.completions.create(
+        model=OPENAI_TEXT_MODEL,
+        messages=[
+            {"role": "system", "content": "Return valid JSON only. No markdown fences, no explanation."},
+            {"role": "user", "content": prompt},
+        ],
+        response_format={"type": "json_object"},
+    )
+    content = response.choices[0].message.content or "{}"
+    return json.loads(content)
+
+
+async def _openai_text_request(prompt: str) -> str:
+    response = await openai_client.chat.completions.create(
+        model=OPENAI_TEXT_MODEL,
+        messages=[
+            {"role": "system", "content": "Write concise, clean Russian marketing/editorial copy."},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    return (response.choices[0].message.content or "").strip()
