@@ -13,7 +13,12 @@ import os
 from io import BytesIO
 from utils.database import get_user_logo
 
-from services.gemini_client import analyze_text_and_propose_slides, generate_final_slides
+from services.gemini_client import (
+    analyze_text_and_propose_slides,
+    generate_final_slides,
+    generate_instagram_caption,
+)
+from services.instagram_package import build_instagram_export
 from services.openai_speech import transcribe_voice
 from services.fal_client import generate_background
 from services.image_renderer import render_slide
@@ -25,7 +30,7 @@ router = Router()
 # --- 1. Input Handling ---
 
 # Move generic text handler to the bottom or restrict it to default state
-@router.message(F.text & ~F.text.in_({"Помощь", "Создать карусель", "⚡️ Быстрый режим", "/start", "/help", "/cancel"}), StateFilter(None))
+@router.message(F.text & ~F.text.in_({"Помощь", "Создать карусель", "🚀 Insta Auto", "⚡️ Быстрый режим", "/start", "/help", "/cancel"}), StateFilter(None))
 async def handle_text_input(message: types.Message, state: FSMContext):
     # Validate text length
     is_valid, error_msg = validate_text_length(message.text)
@@ -34,7 +39,7 @@ async def handle_text_input(message: types.Message, state: FSMContext):
         return
     await process_text_input(message, message.text, state)
 
-@router.message(F.voice)
+@router.message(F.voice, StateFilter(None))
 async def handle_voice_input(message: types.Message, state: FSMContext, bot):
     await message.answer("🎤 Слушаю и распознаю...")
     
@@ -75,7 +80,7 @@ async def handle_voice_input(message: types.Message, state: FSMContext, bot):
     await message.answer(f"📝 Распознанный текст:\n\n{text}", reply_markup=kb)
     await state.set_state(CarouselFlow.waiting_for_text_confirmation)
 
-@router.message(F.forward_from | F.forward_from_chat)
+@router.message((F.forward_from | F.forward_from_chat), StateFilter(None))
 async def handle_forward(message: types.Message, state: FSMContext):
     text = message.text or message.caption or ""
     if not text:
@@ -102,6 +107,116 @@ async def voice_edit(callback: types.CallbackQuery, state: FSMContext):
 async def voice_edit_text(message: types.Message, state: FSMContext):
     await message.answer("✅ Текст обновлен. Анализирую...")
     await process_text_input(message, message.text, state)
+
+
+@router.message(CarouselFlow.insta_auto_waiting_for_text, F.text)
+async def insta_auto_text(message: types.Message, state: FSMContext):
+    await run_insta_auto_pipeline(message, message.text, state)
+
+
+@router.message(CarouselFlow.insta_auto_waiting_for_text, F.voice)
+async def insta_auto_voice(message: types.Message, state: FSMContext, bot):
+    await message.answer("🎤 Слушаю и собираю Insta-ready карусель...")
+    file_id = message.voice.file_id
+    file = await bot.get_file(file_id)
+    destination = f"voice_{file_id}.ogg"
+
+    try:
+        await bot.download_file(file.file_path, destination)
+        text = await transcribe_voice(destination)
+    finally:
+        if os.path.exists(destination):
+            os.remove(destination)
+
+    if not text:
+        await message.answer("😔 Не удалось распознать голосовое. Попробуйте текстом.")
+        return
+
+    await run_insta_auto_pipeline(message, text, state)
+
+
+@router.message(CarouselFlow.insta_auto_waiting_for_text, F.forward_from | F.forward_from_chat)
+async def insta_auto_forward(message: types.Message, state: FSMContext):
+    text = message.text or message.caption or ""
+    if not text:
+        await message.answer("⚠️ В этом сообщении нет текста.")
+        return
+    await run_insta_auto_pipeline(message, text, state)
+
+
+async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMContext):
+    is_valid, error_msg = validate_text_length(text)
+    if not is_valid:
+        await message.answer(error_msg)
+        return
+
+    await state.update_data(base_text=text)
+    status = await message.answer("🚀 Собираю Insta-ready карусель...")
+    await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
+
+    analysis = await analyze_text_and_propose_slides(text)
+    recommended = analysis.get("recommended_slides", 6)
+    target_slides = max(5, min(7, recommended))
+
+    slides_content = await generate_final_slides(text, target_slides, "marketing")
+    if not slides_content:
+        await status.edit_text("😔 Не удалось собрать тексты для карусели.")
+        return
+
+    caption = await generate_instagram_caption(text, slides_content)
+    font_style = choose_insta_font(slides_content)
+    user_logo = get_user_logo(message.chat.id)
+
+    rendered_buffers: list[BytesIO] = []
+    media_group = []
+    for index, slide in enumerate(slides_content, start=1):
+        image_buffer = render_slide(
+            None,
+            slide["title"],
+            slide["body"],
+            text_position="center",
+            font_style=font_style,
+            logo_text=user_logo,
+            slide_index=index,
+            total_slides=len(slides_content),
+        )
+        rendered_bytes = image_buffer.getvalue()
+        rendered_buffers.append(BytesIO(rendered_bytes))
+        media_group.append(
+            InputMediaPhoto(
+                media=BufferedInputFile(
+                    rendered_bytes,
+                    filename=f"instagram_slide_{index}.png",
+                )
+            )
+        )
+
+    export_dir = build_instagram_export(rendered_buffers, caption, text, message.chat.id)
+
+    await status.delete()
+    await message.answer_media_group(media_group)
+
+    caption_preview = caption if len(caption) <= 1200 else caption[:1200] + "..."
+    await message.answer(
+        "✅ Insta-ready карусель готова.\n\n"
+        f"Слайдов: {len(slides_content)}\n"
+        f"Шрифт/тема: {font_style}\n"
+        f"Export: {export_dir}\n\n"
+        f"Caption:\n{caption_preview}",
+    )
+    await state.clear()
+
+
+def choose_insta_font(slides_content: list[dict]) -> str:
+    title_lengths = [len(slide.get("title", "")) for slide in slides_content]
+    if not title_lengths:
+        return "standard"
+    average_length = sum(title_lengths) / len(title_lengths)
+    if average_length < 28:
+        return "dela"
+    if average_length < 42:
+        return "prosto"
+    return "standard"
 
 # --- 3. Analysis & Slide Count Selection ---
 

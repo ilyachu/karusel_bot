@@ -137,3 +137,42 @@ async def generate_final_slides(base_text: str, target_slides_count: int, rewrit
         if 'response' in locals():
             logging.error(f"Raw response: {response.text}")
         return []
+
+
+async def generate_instagram_caption(base_text: str, slides_content: list[dict]) -> str:
+    """
+    Generate a concise Instagram caption that matches the final carousel.
+    """
+    model = genai.GenerativeModel(MODEL_NAME)
+
+    slides_summary = "\n".join(
+        f"- {slide.get('title', '').strip()}: {slide.get('body', '').strip()}"
+        for slide in slides_content
+    )
+
+    prompt = f"""Ты — SMM-редактор. Напиши caption для Instagram-карусели.
+
+Исходный текст:
+{base_text}
+
+Слайды карусели:
+{slides_summary}
+
+Требования:
+1. Язык: русский.
+2. Стиль: живой, уверенный, без воды.
+3. Структура:
+   - 1 короткий хук
+   - 2-4 абзаца сути
+   - 1 CTA в конце
+4. Не больше 1200 символов.
+5. Добавь 5-8 релевантных хэштегов в конце.
+6. Не используй markdown.
+"""
+
+    try:
+        response = await model.generate_content_async(prompt)
+        return response.text.strip()
+    except Exception as e:
+        logging.error(f"Error in generate_instagram_caption: {e}")
+        return "Сохрани этот пост, чтобы вернуться к нему позже.\n\n#instagram #carousel #content #marketing #telegram"

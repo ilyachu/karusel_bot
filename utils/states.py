@@ -1,6 +1,7 @@
 from aiogram.fsm.state import State, StatesGroup
 
 class CarouselFlow(StatesGroup):
+    insta_auto_waiting_for_text = State()
     waiting_for_text_confirmation = State()
     choosing_slide_count = State()
     choosing_rewrite_style = State() # New: Exact, Marketing, etc.

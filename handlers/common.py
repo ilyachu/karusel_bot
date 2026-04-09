@@ -1,9 +1,10 @@
 from aiogram import Router, types, F
-from aiogram.filters import CommandStart, Command, StateFilter
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from utils.database import get_user_logo, set_user_logo, reset_user_logo
+from utils.states import CarouselFlow
 from config import ADMIN_ID
 
 class Settings(StatesGroup):
@@ -16,6 +17,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()  # Clear any existing state
     kb = [
         [KeyboardButton(text="Создать карусель")],
+        [KeyboardButton(text="🚀 Insta Auto")],
         [KeyboardButton(text="⚡️ Быстрый режим")],
         [KeyboardButton(text="🎨 Настройки логотипа")],
         [KeyboardButton(text="Помощь")]
@@ -36,6 +38,16 @@ async def cmd_start(message: types.Message, state: FSMContext):
 async def cmd_create_carousel(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("📝 Отправьте мне текст, голосовое сообщение или перешлите пост для создания карусели.")
+
+@router.message(F.text == "🚀 Insta Auto")
+async def cmd_insta_auto(message: types.Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
+    await message.answer(
+        "🚀 Insta Auto включен.\n\n"
+        "Отправьте текст, голосовое или перешлите пост. Я сам соберу Instagram-ready карусель, "
+        "подготовлю caption и export-пакет."
+    )
 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: types.Message, state: FSMContext):
@@ -100,6 +112,9 @@ async def cmd_help(message: types.Message):
         "1. **Текст**: Просто отправь мне текст, и я предложу структуру слайдов.\n"
         "2. **Голос**: Запиши голосовое, я расшифрую его и сделаю карусель.\n"
         "3. **Пересылка**: Перешли сообщение из канала, я сделаю из него слайды.\n\n"
+        "Режимы:\n"
+        "• `🚀 Insta Auto` — минимум действий, сразу карусель под Instagram\n"
+        "• `⚡️ Быстрый режим` — короткий ручной сценарий\n\n"
         "Команды:\n"
         "/start - Перезапуск\n"
         "/cancel - Отмена текущего действия\n"
