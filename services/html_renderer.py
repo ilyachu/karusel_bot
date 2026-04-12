@@ -289,18 +289,11 @@ def browser_binaries_hint() -> str:
 
 
 def _frame_inset(variant: str) -> str:
-    if variant == "cover":
-        return "78px 54px 150px 54px"
-    if variant == "closing":
-        return "300px 62px 160px 62px"
-    if variant == "stat_focus":
-        return "220px 54px 170px 54px"
-    return "138px 54px 150px 54px"
+    # Keep the card geometry stable across the whole carousel.
+    return "104px 54px 150px 54px"
 
 
 def _frame_padding(variant: str) -> str:
-    if variant == "cover":
-        return "34px 40px 36px"
     return "34px 38px 34px"
 
 
