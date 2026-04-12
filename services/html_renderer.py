@@ -105,8 +105,8 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
 
     title_size = _title_size(spec.variant)
     body_size = _body_size(spec.variant)
-    title_max_width = "620px" if spec.theme == "memory_archive" and spec.variant not in {"cover", "closing"} else "860px"
-    body_max_width = "600px" if spec.theme == "memory_archive" and spec.variant not in {"cover", "closing"} else "840px"
+    title_max_width = "640px"
+    body_max_width = "640px"
 
     return f"""<!DOCTYPE html>
 <html lang="ru">
@@ -142,8 +142,8 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       padding: {_frame_padding(spec.variant)};
       display: flex;
       flex-direction: column;
-      justify-content: {_frame_justify(spec.variant)};
-      gap: 26px;
+      justify-content: flex-start;
+      gap: 0;
       backdrop-filter: blur(22px);
       overflow: hidden;
     }}
@@ -161,6 +161,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       position: relative;
       z-index: 1;
       min-height: 46px;
+      margin-bottom: 28px;
     }}
     .badge, .progress {{
       display: inline-flex;
@@ -195,6 +196,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       font-family: {display_font};
       position: relative;
       z-index: 1;
+      margin: 0 0 22px 0;
     }}
     .body {{
       font-size: {body_size}px;
@@ -205,6 +207,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       font-family: {body_font};
       position: relative;
       z-index: 1;
+      margin: 22px 0 0 0;
     }}
     .divider {{
       width: 180px;
@@ -226,6 +229,14 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       position: relative;
       z-index: 1;
       letter-spacing: 0.01em;
+      margin-top: 28px;
+    }}
+    .content {{
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      min-height: 760px;
+      max-width: 640px;
     }}
     .footer {{
       position: absolute;
@@ -245,15 +256,17 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
   </style>
 </head>
 <body>
-    <div class="canvas">
-      <div class="frame">
+  <div class="canvas">
+    <div class="frame">
       <div class="topbar">
         <div class="progress">{progress}</div>
       </div>
-      <div class="title">{title}</div>
-      <div class="divider"></div>
-      <div class="body">{body}</div>
-      <div class="cta-note">Сохрани пост и вернись к нему позже.</div>
+      <div class="content">
+        <div class="title">{title}</div>
+        <div class="divider"></div>
+        <div class="body">{body}</div>
+        <div class="cta-note">Сохрани пост и вернись к нему позже.</div>
+      </div>
     </div>
     <div class="footer">
       <div class="note">Листай дальше</div>
@@ -297,25 +310,19 @@ def _frame_padding(variant: str) -> str:
     return "34px 38px 34px"
 
 
-def _frame_justify(variant: str) -> str:
-    if variant in {"cover", "closing"}:
-        return "center"
-    return "flex-start"
-
-
 def _title_size(variant: str) -> int:
     return {
-        "cover": 82,
-        "closing": 68,
-        "spotlight": 76,
-        "stat_focus": 80,
+        "cover": 78,
+        "closing": 66,
+        "spotlight": 70,
+        "stat_focus": 70,
         "checklist": 60,
-    }.get(variant, 64)
+    }.get(variant, 70)
 
 
 def _body_size(variant: str) -> int:
     return {
-        "cover": 30,
+        "cover": 28,
         "closing": 28,
         "spotlight": 28,
         "stat_focus": 28,
