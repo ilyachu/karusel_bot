@@ -29,6 +29,29 @@ class HtmlRendererTests(unittest.TestCase):
                 self.assertIn("Founder note", html)
                 self.assertIn("<style>", html)
 
+    def test_build_slide_html_renders_badges_and_support_cards(self):
+        raw_plan = {
+            "carousel": {"theme_hint": "research_mono"},
+            "slides": [
+                {"index": 1, "role": "hook", "title": "Обложка", "body": "Вводный слайд.", "density": "low"},
+                {
+                    "index": 2,
+                    "role": "context",
+                    "title": "Фреймворк",
+                    "body": "Первый блок, второй блок, третий блок, четвертый блок.",
+                    "density": "high",
+                },
+            ],
+        }
+        from services.layout_engine import parse_carousel_plan
+
+        spec = build_instagram_layout_specs(parse_carousel_plan(raw_plan))[1]
+        html = build_slide_html(spec, logo_text="chu ai")
+
+        self.assertIn("support-card", html)
+        self.assertIn("Контекст", html)
+        self.assertIn("variant-framework-grid", html)
+
 
 if __name__ == "__main__":
     unittest.main()

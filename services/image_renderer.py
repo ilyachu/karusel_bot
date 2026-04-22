@@ -13,6 +13,7 @@ PADDING_X = 80
 PADDING_Y = 100
 LOGO_TEXT = "chu ai"
 DEFAULT_BG = (30, 41, 59, 255)
+AUTO_CARD_BOUNDS = (54, 104, WIDTH - 54, HEIGHT - 150)
 
 PALETTES = {
     "standard": {"accent": "#7dd3fc", "muted": "#cbd5e1", "panel": (8, 15, 30, 172)},
@@ -292,7 +293,7 @@ def _build_explicit_layout(spec: LayoutSpec) -> SlideLayout:
             body_size=34,
             title_max_lines=3,
             body_max_lines=4,
-            card=(64, 128, WIDTH - 64, HEIGHT - 180),
+            card=AUTO_CARD_BOUNDS,
             eyebrow=spec.badge_text,
             show_progress=spec.show_progress,
         )
@@ -303,7 +304,7 @@ def _build_explicit_layout(spec: LayoutSpec) -> SlideLayout:
             body_size=32,
             title_max_lines=3,
             body_max_lines=5,
-            card=(72, 330, WIDTH - 72, HEIGHT - 220),
+            card=AUTO_CARD_BOUNDS,
             eyebrow=spec.badge_text,
             show_progress=spec.show_progress,
         )
@@ -314,7 +315,7 @@ def _build_explicit_layout(spec: LayoutSpec) -> SlideLayout:
             body_size=30,
             title_max_lines=3,
             body_max_lines=4,
-            card=(64, 260, WIDTH - 64, HEIGHT - 210),
+            card=AUTO_CARD_BOUNDS,
             eyebrow=spec.badge_text,
             show_progress=spec.show_progress,
         )
@@ -325,16 +326,26 @@ def _build_explicit_layout(spec: LayoutSpec) -> SlideLayout:
             body_size=28,
             title_max_lines=4,
             body_max_lines=6,
-            card=(64, 160, WIDTH - 64, HEIGHT - 180),
+            card=AUTO_CARD_BOUNDS,
             eyebrow=spec.badge_text,
             show_progress=spec.show_progress,
         )
-    return _choose_layout(
+    fallback_layout = _choose_layout(
         title=spec.title,
         body=spec.body,
         text_position=spec.text_position,
         slide_index=spec.slide_index,
         total_slides=spec.total_slides,
+    )
+    return SlideLayout(
+        variant=fallback_layout.variant,
+        title_size=fallback_layout.title_size,
+        body_size=fallback_layout.body_size,
+        title_max_lines=fallback_layout.title_max_lines,
+        body_max_lines=fallback_layout.body_max_lines,
+        card=AUTO_CARD_BOUNDS,
+        eyebrow=spec.badge_text,
+        show_progress=spec.show_progress,
     )
 
 

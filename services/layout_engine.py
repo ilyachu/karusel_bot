@@ -197,6 +197,8 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
     for slide in plan.slides:
         variant = _choose_variant(slide.role, slide.density, slide.index, total_slides)
         text_position = _choose_text_position(variant, slide.role)
+        badge_text = theme_system["eyebrows"].get(slide.role, "Суть")
+        supporting_cards = _build_supporting_cards(slide.body, variant)
         specs.append(
             LayoutSpec(
                 slide_index=slide.index,
@@ -206,13 +208,13 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
                 font_style=theme_system["font_style"],
                 variant=variant,
                 text_position=text_position,
-                badge_text="",
+                badge_text=badge_text,
                 title=slide.title,
                 body=slide.body,
                 highlight_words=slide.emphasis,
                 density=slide.density,
                 show_progress=total_slides > 1,
-                supporting_cards=[],
+                supporting_cards=supporting_cards,
             )
         )
     return specs
@@ -364,21 +366,31 @@ def _choose_variant(role: str, density: str, index: int, total_slides: int) -> s
         return "cover"
     if role == "cta" or index == total_slides:
         return "closing"
+    if role == "context" and density in {"medium", "high"}:
+        return "framework_grid"
     if role == "proof":
         return "stat_focus"
     if role == "checklist":
         return "checklist"
+    if role in {"point", "example"} and density == "low":
+        return "quote"
     if density == "low":
         return "spotlight"
     return "editorial"
 
 
 def _choose_text_position(variant: str, role: str) -> str:
-    if variant in {"cover", "closing", "stat_focus"}:
+    if variant in {"cover", "closing", "stat_focus", "quote"}:
         return "center"
-    if role in {"context", "checklist"}:
+    if role in {"context", "checklist"} or variant == "framework_grid":
         return "top"
     return "center"
+
+
+def _build_supporting_cards(body: str, variant: str) -> list[dict]:
+    if variant == "checklist":
+        return [{"title": phrase} for phrase in _extract_phrases(body, 3)]
+    return []
 
 
 def _normalize_list(value) -> list[str]:

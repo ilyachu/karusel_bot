@@ -49,6 +49,15 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(export_id) REFERENCES export_packages(export_id)
             );
+
+            CREATE TABLE IF NOT EXISTS threads_publish_jobs (
+                job_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                export_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                plan_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(export_id) REFERENCES export_packages(export_id)
+            );
         ''')
         
         conn.commit()
@@ -252,4 +261,24 @@ def create_meta_publish_job(export_id: str, status: str, plan_json: str) -> int 
         return job_id
     except Exception as e:
         logging.error(f"Error creating meta publish job for export {export_id}: {e}")
+        return None
+
+
+def create_threads_publish_job(export_id: str, status: str, plan_json: str) -> int | None:
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            INSERT INTO threads_publish_jobs (export_id, status, plan_json)
+            VALUES (?, ?, ?)
+            ''',
+            (export_id, status, plan_json),
+        )
+        job_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return job_id
+    except Exception as e:
+        logging.error(f"Error creating Threads publish job for export {export_id}: {e}")
         return None

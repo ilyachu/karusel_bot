@@ -22,6 +22,7 @@ Telegram-бот для генерации каруселей из текста, 
 - HTML/CSS-рендер карточек через Playwright.
 - Экспорт PNG-слайдов, caption и metadata.
 - Подготовка Meta publishing plan без реальной публикации.
+- Публикация готовой карусели в Threads через официальный API.
 - Админский список разрешённых пользователей.
 
 ## Как это работает
@@ -217,6 +218,8 @@ data/exports/<timestamp>-<chat_id>-<slug>/
 - `render_mode`
 
 Этот export package — граница между генерацией и будущей публикацией.
+
+Из того же export package можно сразу собрать `Threads`-ready export plan и отдать его в отдельный OAuth/publisher сервис.
 
 ## Подготовка к Instagram / Meta publishing
 

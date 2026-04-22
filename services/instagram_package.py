@@ -42,6 +42,7 @@ def build_instagram_export(
         "export_slug": os.path.basename(export_dir),
         "created_at_utc": now_utc.isoformat(),
         "chat_id": chat_id,
+        "source_text": source_text,
         "slides_count": len(slides),
         "caption_file": "caption.txt",
         "slides": [f"slide_{index:02d}.png" for index in range(1, len(slides) + 1)],
@@ -52,6 +53,15 @@ def build_instagram_export(
         json.dump(metadata, f, ensure_ascii=False, indent=2)
 
     return export_dir
+
+
+def update_export_metadata(export_dir: str, extra_metadata: dict) -> None:
+    metadata_path = os.path.join(export_dir, "metadata.json")
+    with open(metadata_path, "r", encoding="utf-8") as f:
+        metadata = json.load(f)
+    metadata.update(extra_metadata)
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
 
 
 def _slugify(value: str) -> str:

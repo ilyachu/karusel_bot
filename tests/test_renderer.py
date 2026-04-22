@@ -5,7 +5,7 @@ from io import BytesIO
 
 from PIL import Image
 
-from services.image_renderer import HEIGHT, WIDTH, render_layout_spec, render_slide
+from services.image_renderer import AUTO_CARD_BOUNDS, HEIGHT, WIDTH, _build_explicit_layout, render_layout_spec, render_slide
 from services.layout_engine import build_fallback_instagram_plan, build_instagram_layout_specs
 
 
@@ -79,6 +79,21 @@ class RenderSlideTests(unittest.TestCase):
         spec = build_instagram_layout_specs(plan)[0]
         buffer = render_layout_spec(spec, logo_text="chu ai", bg_source=None)
         self.assert_png_dimensions(buffer)
+
+    def test_explicit_auto_layout_keeps_same_card_bounds_across_variants(self):
+        plan = build_fallback_instagram_plan(
+            [
+                {"title": "Обложка", "body": "Короткий подзаголовок."},
+                {"title": "Факт", "body": "Чуть больше текста для среднего слайда."},
+                {"title": "CTA", "body": "Сохрани пост и вернись позже."},
+            ]
+        )
+        specs = build_instagram_layout_specs(plan)
+
+        for spec in specs:
+            with self.subTest(variant=spec.variant):
+                layout = _build_explicit_layout(spec)
+                self.assertEqual(layout.card, AUTO_CARD_BOUNDS)
 
 
 if __name__ == "__main__":

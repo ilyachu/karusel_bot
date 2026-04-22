@@ -50,32 +50,39 @@ class LayoutEngineTests(unittest.TestCase):
         self.assertEqual(plan.slides[1].role, "cta")
 
     def test_build_instagram_layout_specs_maps_roles_to_variants(self):
-        plan = build_fallback_instagram_plan(
-            [
-                {"title": "Хук", "body": "Первый слайд"},
-                {"title": "Контекст", "body": "Второй слайд"},
-                {"title": "CTA", "body": "Финальный слайд"},
-            ]
-        )
+        raw = {
+            "carousel": {"theme_hint": "business_dark"},
+            "slides": [
+                {"index": 1, "role": "hook", "title": "Хук", "body": "Первый слайд", "density": "low"},
+                {"index": 2, "role": "context", "title": "Контекст", "body": "Второй слайд, более длинный контекст с деталями.", "density": "medium"},
+                {"index": 3, "role": "point", "title": "Цитата", "body": "Короткий сильный вывод.", "density": "low"},
+                {"index": 4, "role": "cta", "title": "CTA", "body": "Финальный слайд", "density": "low"},
+            ],
+        }
+        plan = parse_carousel_plan(raw)
         specs = build_instagram_layout_specs(plan)
 
         self.assertEqual(specs[0].variant, "cover")
+        self.assertEqual(specs[1].variant, "framework_grid")
+        self.assertEqual(specs[2].variant, "quote")
         self.assertEqual(specs[-1].variant, "closing")
         self.assertTrue(all(spec.theme == "business_dark" for spec in specs))
 
-    def test_supporting_cards_are_disabled_for_insta_auto_layout(self):
-        plan = build_fallback_instagram_plan(
-            [
-                {"title": "Поговорим про память", "body": "Контекстное окно растет. Задачи растут быстрее."},
-                {"title": "Почему тема болит", "body": "Проекты длиннее, цепочки сложнее, а договоренности уже не помещаются в один чат."},
-                {"title": "Что делать", "body": "Сохрани пост и вернись к нему позже."},
+    def test_badges_are_added_but_support_cards_stay_for_real_checklists_only(self):
+        raw = {
+            "carousel": {"theme_hint": "memory_archive"},
+            "slides": [
+                {"index": 1, "role": "hook", "title": "Поговорим про память", "body": "Контекстное окно растет.", "density": "low"},
+                {"index": 2, "role": "context", "title": "Почему тема болит", "body": "Проекты длиннее, цепочки сложнее, а договоренности уже не помещаются в один чат.", "density": "high"},
+                {"index": 3, "role": "cta", "title": "Что делать", "body": "Сохрани пост и вернись к нему позже.", "density": "low"},
             ],
-            theme_hint="memory_archive",
-        )
+        }
+        plan = parse_carousel_plan(raw)
         specs = build_instagram_layout_specs(plan)
 
-        self.assertTrue(all(spec.supporting_cards == [] for spec in specs))
-        self.assertTrue(all(spec.badge_text == "" for spec in specs))
+        self.assertEqual(specs[1].variant, "framework_grid")
+        self.assertEqual(specs[1].supporting_cards, [])
+        self.assertEqual(specs[0].badge_text, "Главное")
 
     def test_theme_selection_policy_prefers_memory_archive_for_memory_posts(self):
         plan = build_fallback_instagram_plan(

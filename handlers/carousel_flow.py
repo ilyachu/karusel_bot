@@ -14,8 +14,19 @@ import logging
 import os
 from io import BytesIO
 from dataclasses import asdict
+from config import (
+    EXPORT_PUBLIC_BASE_URL,
+    THREADS_ACCESS_TOKEN,
+    THREADS_API_BASE,
+    THREADS_MEDIA_PROXY_BASE_URL,
+    THREADS_MEDIA_PROXY_BOT_ALIAS,
+    THREADS_MEDIA_PROXY_SECRET,
+    THREADS_MEDIA_PROXY_TTL_SECONDS,
+    THREADS_USER_ID,
+)
 from utils.database import (
     create_meta_publish_job,
+    create_threads_publish_job,
     get_export_package,
     get_user_logo,
     save_export_package,
@@ -28,7 +39,7 @@ from services.gemini_client import (
     generate_instagram_caption,
 )
 from services.export_hosting import build_public_export_info
-from services.instagram_package import build_instagram_export
+from services.instagram_package import build_instagram_export, update_export_metadata
 from services.layout_engine import (
     DEFAULT_CTA_BODY,
     DEFAULT_CTA_TITLE,
@@ -42,6 +53,8 @@ from services.layout_engine import (
 )
 from services.html_renderer import browser_binaries_hint, render_layout_spec_html
 from services.meta_publish import MetaCredentials, build_carousel_publish_plan, load_export_package
+from services.threads_publish import build_threads_publish_plan, serialize_threads_publish_plan
+from services.threads_publisher import ThreadsPublisher
 from services.openai_speech import transcribe_voice
 from services.fal_client import generate_background
 from services.image_renderer import render_layout_spec, render_slide
@@ -267,10 +280,28 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     )
 
     await status.delete()
-    await message.answer_media_group(media_group)
+    sent_messages = await message.answer_media_group(media_group)
+    telegram_media_items = []
+    for index, sent_message in enumerate(sent_messages, start=1):
+        if sent_message.photo:
+            telegram_media_items.append(
+                {
+                    "file_id": sent_message.photo[-1].file_id,
+                    "media_type": "photo",
+                    "order_index": index,
+                }
+            )
+    if telegram_media_items:
+        update_export_metadata(
+            export_dir,
+            {"telegram_media_items": telegram_media_items},
+        )
     actions = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🛰 Prepare Meta Publish", callback_data=f"meta_prepare:{export_id}")]
+            [
+                InlineKeyboardButton(text="🛰 Prepare Meta Publish", callback_data=f"meta_prepare:{export_id}"),
+                InlineKeyboardButton(text="🧵 Publish to Threads", callback_data=f"threads_publish:{export_id}"),
+            ]
         ]
     )
 
@@ -357,6 +388,70 @@ async def meta_prepare_publish(callback: types.CallbackQuery):
         f"Public base: {public_info.public_base_url}\n"
         f"First slide URL: {public_info.slide_urls[0]}\n\n"
         "Следующий шаг: подключить Meta account и подставить реальные `IG_USER_ID` + `ACCESS_TOKEN`."
+    )
+
+
+@router.callback_query(F.data.startswith("threads_publish:"))
+async def threads_prepare_publish(callback: types.CallbackQuery):
+    await callback.answer()
+    export_id = callback.data.split(":", 1)[1]
+    export_record = get_export_package(export_id)
+    if not export_record:
+        await callback.message.answer("⚠️ Export package не найден. Сгенерируйте карусель заново.")
+        return
+
+    if not THREADS_ACCESS_TOKEN:
+        await callback.message.answer(
+            "⚠️ Threads publisher не настроен.\n\n"
+            "Нужно задать `THREADS_ACCESS_TOKEN`, при необходимости `THREADS_USER_ID`, "
+            "`THREADS_API_BASE` и `EXPORT_PUBLIC_BASE_URL`."
+        )
+        return
+
+    plan = build_threads_publish_plan(
+        export_record["export_dir"],
+        public_base_url=EXPORT_PUBLIC_BASE_URL or None,
+    )
+
+    plan_json = json.dumps(serialize_threads_publish_plan(plan), ensure_ascii=False, indent=2)
+    job_id = create_threads_publish_job(
+        export_id=export_id,
+        status="prepared_for_threads_publish",
+        plan_json=plan_json,
+    )
+
+    publisher = ThreadsPublisher(
+        access_token=THREADS_ACCESS_TOKEN,
+        bot=callback.bot,
+        user_id=THREADS_USER_ID,
+        api_base=THREADS_API_BASE,
+        media_proxy_base_url=THREADS_MEDIA_PROXY_BASE_URL,
+        media_proxy_bot_alias=THREADS_MEDIA_PROXY_BOT_ALIAS,
+        media_proxy_secret=THREADS_MEDIA_PROXY_SECRET,
+        media_proxy_ttl_seconds=THREADS_MEDIA_PROXY_TTL_SECONDS,
+    )
+    await callback.message.answer("🧵 Публикую карусель в Threads...")
+    result = await publisher.publish_export(
+        export_dir=export_record["export_dir"],
+        public_base_url=EXPORT_PUBLIC_BASE_URL or None,
+    )
+
+    if result.success:
+        await callback.message.answer(
+            "✅ Карусель опубликована в Threads.\n\n"
+            f"Export ID: {plan.public_export.export_id}\n"
+            f"Job ID: {job_id}\n"
+            f"Slides: {len(plan.posts)}\n"
+            f"Container ID: {result.creation_id}\n"
+            f"Threads ID: {result.published_id}"
+        )
+        return
+
+    await callback.message.answer(
+        "❌ Не удалось опубликовать карусель в Threads.\n\n"
+        f"Export ID: {plan.public_export.export_id}\n"
+        f"Job ID: {job_id}\n"
+        f"Ошибка: {result.error_message}"
     )
 
 # --- 3. Analysis & Slide Count Selection ---

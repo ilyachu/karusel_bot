@@ -16,3 +16,17 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  exports:
+    image: nginx:alpine
+    container_name: karusel_exports
+    restart: always
+    ports:
+      - "8081:80"
+    volumes:
+      - ./data/exports:/usr/share/nginx/html:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

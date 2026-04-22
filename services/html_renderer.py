@@ -38,46 +38,46 @@ THEME_TOKENS = {
         "chip": "rgba(255,255,255,0.08)",
     },
     "memory_archive": {
-        "bg": "linear-gradient(180deg, #f5f1e8 0%, #ebe4d7 100%)",
-        "panel": "rgba(255, 251, 245, 0.82)",
+        "bg": "radial-gradient(circle at top left, rgba(164, 116, 73, 0.12), transparent 28%), linear-gradient(180deg, #f6f0e5 0%, #e8decc 100%)",
+        "panel": "rgba(255, 250, 242, 0.88)",
         "text": "#1f2933",
-        "muted": "#52606d",
+        "muted": "#5b6570",
         "accent": "#2f6f62",
-        "chip": "rgba(47,111,98,0.08)",
-        "line": "rgba(31,41,51,0.08)",
+        "chip": "rgba(47,111,98,0.10)",
+        "line": "rgba(61, 44, 29, 0.10)",
         "display_font": "Georgia, 'Times New Roman', serif",
         "body_font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     },
     "founder_brief": {
-        "bg": "radial-gradient(circle at top left, rgba(99,102,241,0.18), transparent 26%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)",
-        "panel": "rgba(255,255,255,0.78)",
+        "bg": "radial-gradient(circle at top left, rgba(14,165,233,0.22), transparent 28%), linear-gradient(180deg, #f8fbff 0%, #e8f1fb 100%)",
+        "panel": "rgba(255,255,255,0.82)",
         "text": "#0f172a",
         "muted": "#475569",
-        "accent": "#4f46e5",
-        "chip": "rgba(79,70,229,0.08)",
-        "line": "rgba(79,70,229,0.08)",
+        "accent": "#0369a1",
+        "chip": "rgba(3,105,161,0.08)",
+        "line": "rgba(3,105,161,0.10)",
         "display_font": "'Arial Black', 'Segoe UI', sans-serif",
         "body_font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     },
     "growth_black": {
-        "bg": "radial-gradient(circle at top right, rgba(163,230,53,0.26), transparent 24%), linear-gradient(180deg, #030712 0%, #111827 100%)",
-        "panel": "rgba(3,7,18,0.84)",
+        "bg": "radial-gradient(circle at top right, rgba(190,242,100,0.28), transparent 24%), radial-gradient(circle at bottom left, rgba(249,115,22,0.10), transparent 20%), linear-gradient(180deg, #020617 0%, #0f172a 100%)",
+        "panel": "rgba(4,10,22,0.88)",
         "text": "#f9fafb",
-        "muted": "#d1d5db",
-        "accent": "#a3e635",
-        "chip": "rgba(163,230,53,0.10)",
-        "line": "rgba(255,255,255,0.06)",
+        "muted": "#d5dde7",
+        "accent": "#bef264",
+        "chip": "rgba(190,242,100,0.10)",
+        "line": "rgba(255,255,255,0.08)",
         "display_font": "'Arial Black', 'Trebuchet MS', sans-serif",
         "body_font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     },
     "research_mono": {
-        "bg": "linear-gradient(180deg, #f7f7f5 0%, #ecece8 100%)",
-        "panel": "rgba(255,255,255,0.80)",
+        "bg": "radial-gradient(circle at top right, rgba(185,28,28,0.08), transparent 20%), linear-gradient(180deg, #f8f7f3 0%, #ece8df 100%)",
+        "panel": "rgba(255,255,255,0.84)",
         "text": "#111827",
-        "muted": "#374151",
-        "accent": "#111827",
-        "chip": "rgba(17,24,39,0.06)",
-        "line": "rgba(17,24,39,0.08)",
+        "muted": "#4b5563",
+        "accent": "#b91c1c",
+        "chip": "rgba(185,28,28,0.06)",
+        "line": "rgba(17,24,39,0.10)",
         "display_font": "'SFMono-Regular', 'Menlo', 'Monaco', monospace",
         "body_font": "'SFMono-Regular', 'Menlo', 'Monaco', monospace",
     },
@@ -102,11 +102,24 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     badge = html.escape(spec.badge_text)
     logo = html.escape(logo_text)
     progress = f"{spec.slide_index}/{spec.total_slides}" if spec.show_progress else ""
+    variant_class = spec.variant.replace("_", "-")
 
     title_size = _title_size(spec.variant)
     body_size = _body_size(spec.variant)
-    title_max_width = "640px"
-    body_max_width = "640px"
+    title_max_width = _title_max_width(spec.variant)
+    body_max_width = _body_max_width(spec.variant)
+    divider_display = "none" if spec.variant in {"quote", "framework_grid", "closing"} else "block"
+    supporting_cards_html = "".join(
+        f'<div class="support-card"><span>{html.escape(card.get("title", ""))}</span></div>'
+        for card in spec.supporting_cards
+    )
+    quote_mark = '<div class="quote-mark">“</div>' if spec.variant == "quote" else ""
+    hero_deco = '<div class="hero-orb"></div>' if spec.variant in {"cover", "closing"} else ""
+    cta_box = (
+        '<div class="cta-box"><span>Сохрани карусель</span><strong>и подпишись на новые разборы</strong></div>'
+        if spec.variant == "closing"
+        else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="ru">
@@ -135,7 +148,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     .frame {{
       position: absolute;
       inset: {_frame_inset(spec.variant)};
-      border-radius: 42px;
+      border-radius: 46px;
       background: {tokens["panel"]};
       border: 1px solid {_frame_border(tokens, spec.theme)};
       box-shadow: {_frame_shadow(spec.theme)};
@@ -147,6 +160,10 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       backdrop-filter: blur(22px);
       overflow: hidden;
     }}
+    .frame.variant-cover,
+    .frame.variant-closing {{
+      padding-top: 42px;
+    }}
     .frame::before {{
       content: "";
       position: absolute;
@@ -156,29 +173,29 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     }}
     .topbar {{
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
       align-items: center;
       position: relative;
       z-index: 1;
       min-height: 46px;
-      margin-bottom: 28px;
+      margin-bottom: 24px;
     }}
     .badge, .progress {{
       display: inline-flex;
       align-items: center;
       min-height: 46px;
-      padding: 0 18px;
+      padding: 0 16px;
       border-radius: {("12px" if spec.theme == "research_mono" else "999px")};
       background: {tokens["chip"]};
-      font-size: 20px;
+      font-size: 18px;
       line-height: 1;
+      border: 1px solid {_support_border(spec.theme)};
     }}
     .badge {{
       color: {tokens["accent"]};
       text-transform: uppercase;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.14em;
       font-weight: 700;
-      margin-right: auto;
       opacity: {("1" if badge else "0")};
       visibility: {("visible" if badge else "hidden")};
     }}
@@ -188,26 +205,26 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
     }}
     .title {{
       font-size: {title_size}px;
-      line-height: 1.02;
+      line-height: 0.98;
       font-weight: 900;
-      letter-spacing: -0.03em;
+      letter-spacing: -0.04em;
       max-width: {title_max_width};
       white-space: pre-wrap;
       font-family: {display_font};
       position: relative;
       z-index: 1;
-      margin: 0 0 22px 0;
+      margin: 0 0 18px 0;
     }}
     .body {{
       font-size: {body_size}px;
-      line-height: 1.38;
+      line-height: 1.32;
       color: {tokens["muted"]};
       max-width: {body_max_width};
       white-space: normal;
       font-family: {body_font};
       position: relative;
       z-index: 1;
-      margin: 22px 0 0 0;
+      margin: 16px 0 0 0;
     }}
     .divider {{
       width: 180px;
@@ -216,55 +233,171 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
       background: {tokens["accent"]};
       position: relative;
       z-index: 1;
+      display: {divider_display};
     }}
     .supporting-cards {{
-      display: none;
+      display: {("grid" if supporting_cards_html else "none")};
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 24px;
+      max-width: 760px;
+      position: relative;
+      z-index: 1;
+    }}
+    .support-card {{
+      padding: 16px 18px;
+      border-radius: 22px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid {_support_border(spec.theme)};
+      box-shadow: {_support_shadow(spec.theme)};
+      color: {tokens["text"]};
+      min-height: 92px;
+      display: flex;
+      align-items: flex-start;
+    }}
+    .support-card span {{
+      font-size: 20px;
+      line-height: 1.3;
     }}
     .cta-note {{
       display: {("block" if spec.variant == "closing" else "none")};
       color: {tokens["accent"]};
-      font-size: 20px;
+      font-size: 18px;
       line-height: 1.4;
       font-weight: 700;
       position: relative;
       z-index: 1;
-      letter-spacing: 0.01em;
-      margin-top: 28px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 18px;
+    }}
+    .cta-box {{
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 26px;
+      padding: 20px 22px;
+      border-radius: 26px;
+      background: linear-gradient(135deg, {tokens["chip"]}, rgba(255,255,255,0.04));
+      border: 1px solid {_support_border(spec.theme)};
+      max-width: 520px;
+      position: relative;
+      z-index: 1;
+    }}
+    .cta-box span {{
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: {tokens["accent"]};
+    }}
+    .cta-box strong {{
+      font-size: 30px;
+      line-height: 1.12;
+      color: {tokens["text"]};
+    }}
+    .quote-mark {{
+      display: {("block" if spec.variant == "quote" else "none")};
+      font-size: 120px;
+      line-height: 0.8;
+      color: {tokens["accent"]};
+      margin-bottom: 8px;
+      position: relative;
+      z-index: 1;
+    }}
+    .hero-orb {{
+      position: absolute;
+      right: -40px;
+      top: 120px;
+      width: 260px;
+      height: 260px;
+      border-radius: 999px;
+      background: radial-gradient(circle, {tokens["chip"]} 0%, transparent 70%);
+      opacity: 0.9;
+      z-index: 0;
+      display: {("block" if spec.variant in {"cover", "closing"} else "none")};
     }}
     .content {{
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      min-height: 760px;
-      max-width: 640px;
+      min-height: 780px;
+      max-width: {title_max_width};
+      position: relative;
     }}
     .footer {{
       position: absolute;
       left: 72px;
       right: 72px;
-      bottom: 62px;
+      bottom: 56px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       color: {tokens["muted"]};
-      font-size: 24px;
+      font-size: 22px;
       font-family: {body_font};
     }}
     .footer .note {{
-      opacity: {("0.86" if spec.variant == "cover" else "0.0")};
+      opacity: {("0.88" if spec.variant in {"cover", "closing"} else "0.28")};
+    }}
+    .frame.variant-cover .title {{
+      margin-top: 20px;
+      max-width: 760px;
+    }}
+    .frame.variant-cover .body {{
+      max-width: 620px;
+      font-size: 30px;
+    }}
+    .frame.variant-closing .title {{
+      max-width: 680px;
+      font-size: 82px;
+    }}
+    .frame.variant-closing .body {{
+      max-width: 620px;
+      font-size: 26px;
+    }}
+    .frame.variant-quote .title {{
+      font-size: 22px;
+      line-height: 1.2;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: {tokens["accent"]};
+      max-width: 520px;
+      margin-bottom: 8px;
+    }}
+    .frame.variant-quote .body {{
+      font-size: 58px;
+      line-height: 1.02;
+      max-width: 760px;
+      color: {tokens["text"]};
+      font-family: {display_font};
+      letter-spacing: -0.04em;
+      margin-top: 0;
+    }}
+    .frame.variant-framework-grid .title {{
+      max-width: 720px;
+      font-size: 64px;
+    }}
+    .frame.variant-framework-grid .body {{
+      max-width: 700px;
+      font-size: 24px;
     }}
   </style>
 </head>
 <body>
   <div class="canvas">
-    <div class="frame">
+    <div class="frame variant-{variant_class}">
+      {hero_deco}
       <div class="topbar">
+        <div class="badge">{badge}</div>
         <div class="progress">{progress}</div>
       </div>
       <div class="content">
+        {quote_mark}
         <div class="title">{title}</div>
         <div class="divider"></div>
         <div class="body">{body}</div>
+        <div class="supporting-cards">{supporting_cards_html}</div>
+        {cta_box}
         <div class="cta-note">Сохрани пост и вернись к нему позже.</div>
       </div>
     </div>
@@ -289,7 +422,10 @@ def render_layout_spec_html(spec: LayoutSpec, logo_text: str = "chu ai") -> byte
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1080, "height": 1350}, device_scale_factor=1)
         page.set_content(html_content, wait_until="load")
-        png = page.screenshot(type="png")
+        png = page.screenshot(
+            type="png",
+            clip={"x": 0, "y": 0, "width": 1080, "height": 1350},
+        )
         browser.close()
     return png
 
@@ -312,8 +448,10 @@ def _frame_padding(variant: str) -> str:
 
 def _title_size(variant: str) -> int:
     return {
-        "cover": 78,
-        "closing": 66,
+        "cover": 92,
+        "closing": 82,
+        "quote": 24,
+        "framework_grid": 64,
         "spotlight": 70,
         "stat_focus": 70,
         "checklist": 60,
@@ -322,12 +460,32 @@ def _title_size(variant: str) -> int:
 
 def _body_size(variant: str) -> int:
     return {
-        "cover": 28,
-        "closing": 28,
+        "cover": 30,
+        "closing": 26,
+        "quote": 58,
+        "framework_grid": 24,
         "spotlight": 28,
         "stat_focus": 28,
         "checklist": 26,
     }.get(variant, 28)
+
+
+def _title_max_width(variant: str) -> str:
+    return {
+        "cover": "760px",
+        "closing": "700px",
+        "quote": "520px",
+        "framework_grid": "720px",
+    }.get(variant, "660px")
+
+
+def _body_max_width(variant: str) -> str:
+    return {
+        "cover": "620px",
+        "closing": "620px",
+        "quote": "760px",
+        "framework_grid": "700px",
+    }.get(variant, "640px")
 
 
 def _background_lines(tokens: dict) -> str:
