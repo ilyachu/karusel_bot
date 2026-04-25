@@ -206,18 +206,22 @@ async def insta_theme_selected(callback: types.CallbackQuery, state: FSMContext)
     theme = callback.data.split(":", 1)[1]
     if theme not in THEME_LABELS:
         return
-    await state.update_data(insta_theme_override=theme)
-    data = await state.get_data()
-    visual_mode = data.get("insta_visual_mode", "auto")
-    await callback.message.edit_text(
-        "🚀 Insta Auto включен.\n\n"
-        "Отправьте текст, голосовое или перешлите пост. Я сам соберу Instagram-ready карусель, "
-        "подготовлю caption и export-пакет.\n\n"
-        f"Тема сейчас: `{THEME_LABELS[theme]}`.\n"
-        f"Визуал: `{VISUAL_MODE_LABELS.get(visual_mode, 'Auto')}`.",
-        reply_markup=build_insta_auto_keyboard(theme, visual_mode),
-        parse_mode="Markdown",
+    theme_to_preset = {
+        "auto": "auto",
+        "memory_archive": "calm",
+        "founder_brief": "business",
+        "growth_black": "contrast",
+        "research_mono": "facts",
+    }
+    preset_key = theme_to_preset.get(theme, "auto")
+    preset = INSTA_VISUAL_PRESETS[preset_key]
+    await state.update_data(
+        insta_visual_preset=preset_key,
+        insta_theme_override=preset["theme"],
+        insta_visual_mode=preset["visual_mode"],
+        insta_custom_bg_bytes=None,
     )
+    await show_insta_auto_setup(callback.message, state, edit=True)
 
 
 @router.callback_query(CarouselFlow.insta_auto_waiting_for_text, F.data.startswith("insta_visual:"))
@@ -226,18 +230,9 @@ async def insta_visual_selected(callback: types.CallbackQuery, state: FSMContext
     visual_mode = callback.data.split(":", 1)[1]
     if visual_mode not in VISUAL_MODE_LABELS:
         return
-    await state.update_data(insta_visual_mode=visual_mode)
-    data = await state.get_data()
-    theme = data.get("insta_theme_override", "auto")
-    await callback.message.edit_text(
-        "🚀 Insta Auto включен.\n\n"
-        "Отправьте текст, голосовое или перешлите пост. Я сам соберу Instagram-ready карусель, "
-        "подготовлю caption и export-пакет.\n\n"
-        f"Тема сейчас: `{THEME_LABELS.get(theme, '🧠 Auto')}`.\n"
-        f"Визуал: `{VISUAL_MODE_LABELS[visual_mode]}`.",
-        reply_markup=build_insta_auto_keyboard(theme, visual_mode),
-        parse_mode="Markdown",
-    )
+    card_format = visual_mode if visual_mode in INSTA_CARD_FORMAT_LABELS else "auto"
+    await state.update_data(insta_visual_mode=visual_mode, insta_card_format=card_format)
+    await show_insta_auto_setup(callback.message, state, edit=True)
 
 
 @router.callback_query(
