@@ -4,7 +4,7 @@ import os
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update
 from config import TELEGRAM_BOT_TOKEN, ADMIN_ID, DATA_DIR
-from handlers import common, carousel_flow, admin
+from handlers import common, carousel_flow, admin, cover_flow
 from utils.database import init_db
 from middlewares.access import AccessMiddleware
 
@@ -74,6 +74,7 @@ async def main():
 
     dp.include_router(admin.router)
     dp.include_router(common.router)
+    dp.include_router(cover_flow.router)
     dp.include_router(carousel_flow.router)
 
     logging.info("Bot started...")

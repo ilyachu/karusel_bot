@@ -3,6 +3,8 @@ import re
 
 DEFAULT_CTA_TITLE = "Подписывайтесь на канал"
 DEFAULT_CTA_BODY = "Подписывайтесь на канал в шапке профиля чтоб получать больше информации"
+EDITORIAL_CTA_TITLE = "Сохрани карусель"
+EDITORIAL_CTA_BODY = "Вернись к разбору позже или забери идею для своей системы."
 
 
 THEME_SYSTEMS = {
@@ -112,6 +114,42 @@ THEME_LABELS = {
     "research_mono": "🔬 Research Mono",
 }
 
+VISUAL_MODE_LABELS = {
+    "auto": "Auto",
+    "classic": "Classic",
+    "editorial": "Editorial",
+    "brief": "Founder Brief",
+    "data": "Data Brief",
+}
+
+PRESET_VISUAL_PROFILES = {
+    "glitch": {
+        "theme": "research_mono",
+        "visual_mode": "data",
+        "label": "Glitch Data",
+    },
+    "lofi": {
+        "theme": "memory_archive",
+        "visual_mode": "editorial",
+        "label": "Lofi Editorial",
+    },
+    "neon": {
+        "theme": "growth_black",
+        "visual_mode": "data",
+        "label": "Neon Data",
+    },
+    "paper": {
+        "theme": "founder_brief",
+        "visual_mode": "brief",
+        "label": "Paper Brief",
+    },
+    "acid": {
+        "theme": "growth_black",
+        "visual_mode": "editorial",
+        "label": "Acid Editorial",
+    },
+}
+
 THEME_KEYWORDS = {
     "memory_archive": [
         "memory", "mempalace", "памят", "контекст", "chat", "чаты",
@@ -144,6 +182,7 @@ class SlidePlanEntry:
     emphasis: list[str]
     density: str
     theme_hint: str
+    supporting_cards: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -162,6 +201,7 @@ class LayoutSpec:
     total_slides: int
     role: str
     theme: str
+    visual_mode: str
     font_style: str
     variant: str
     text_position: str
@@ -171,6 +211,13 @@ class LayoutSpec:
     highlight_words: list[str]
     density: str
     show_progress: bool
+    section_label: str = ""
+    section_number: str = ""
+    watermark_number: str = ""
+    footer_tags: list[str] = field(default_factory=list)
+    accent_spans: list[str] = field(default_factory=list)
+    brand_mark: str = ""
+    progress_style: str = "pill"
     supporting_cards: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -188,7 +235,83 @@ class ThemeDecision:
         return asdict(self)
 
 
-def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
+@dataclass(frozen=True)
+class VisualModeDecision:
+    requested_mode: str
+    resolved_mode: str
+    reason: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def build_instagram_layout_specs(plan: CarouselPlan, visual_mode: str = "classic") -> list[LayoutSpec]:
+    decision = resolve_visual_mode(plan, visual_mode)
+    if decision.resolved_mode == "editorial":
+        return _build_editorial_layout_specs(plan)
+    if decision.resolved_mode == "brief":
+        return _build_brief_layout_specs(plan)
+    if decision.resolved_mode == "data":
+        return _build_data_layout_specs(plan)
+    return _build_classic_layout_specs(plan)
+
+
+def resolve_preset_visual_profile(preset_key: str) -> dict[str, str]:
+    return PRESET_VISUAL_PROFILES.get(preset_key, PRESET_VISUAL_PROFILES["lofi"])
+
+
+def resolve_visual_mode(plan: CarouselPlan, visual_mode: str = "classic") -> VisualModeDecision:
+    requested = visual_mode if visual_mode in VISUAL_MODE_LABELS else "classic"
+    if requested != "auto":
+        return VisualModeDecision(
+            requested_mode=requested,
+            resolved_mode=requested,
+            reason=f"{VISUAL_MODE_LABELS[requested]} selected manually.",
+        )
+
+    corpus = _plan_corpus(plan)
+    number_count = len(_meaningful_number_matches(corpus))
+    data_terms = _count_matches(
+        corpus,
+        [
+            "api", "benchmark", "model", "модель", "модели", "openai", "nvidia",
+            "deepseek", "base url", "token", "токен", "вычислен", "research",
+            "исслед", "метрик", "метрика",
+        ],
+    )
+    brief_terms = _count_matches(
+        corpus,
+        [
+            "founder", "фаундер", "product", "продукт", "strategy", "стратег",
+            "roadmap", "pricing", "gtm", "market", "рынок", "startup", "стартап",
+            "decision", "решени", "launch", "запуск",
+        ],
+    )
+    narrative_terms = _count_matches(
+        corpus,
+        ["история", "новость", "почему", "контекст", "разбор", "сценарий", "case", "кейс"],
+    )
+
+    if number_count >= 2 or (number_count >= 1 and data_terms >= 1) or data_terms >= 3:
+        return VisualModeDecision(
+            requested_mode="auto",
+            resolved_mode="data",
+            reason=f"Data Brief: found {number_count} numeric signal(s) and {data_terms} data/API signal(s).",
+        )
+    if plan.theme_hint == "founder_brief" or brief_terms >= 2:
+        return VisualModeDecision(
+            requested_mode="auto",
+            resolved_mode="brief",
+            reason=f"Founder Brief: found {brief_terms} product/founder signal(s).",
+        )
+    return VisualModeDecision(
+        requested_mode="auto",
+        resolved_mode="editorial",
+        reason=f"Editorial: narrative/news structure detected ({narrative_terms} narrative signal(s)).",
+    )
+
+
+def _build_classic_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
     theme = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "business_dark"
     theme_system = THEME_SYSTEMS[theme]
     total_slides = len(plan.slides)
@@ -205,6 +328,7 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
                 total_slides=total_slides,
                 role=slide.role,
                 theme=theme,
+                visual_mode="classic",
                 font_style=theme_system["font_style"],
                 variant=variant,
                 text_position=text_position,
@@ -220,17 +344,131 @@ def build_instagram_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
     return specs
 
 
-def enforce_default_cta_slide(plan: CarouselPlan) -> CarouselPlan:
+def _build_editorial_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
+    theme = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "business_dark"
+    theme_system = THEME_SYSTEMS[theme]
+    total_slides = len(plan.slides)
+
+    specs: list[LayoutSpec] = []
+    for slide in plan.slides:
+        variant = _choose_editorial_variant(slide, total_slides)
+        specs.append(
+            LayoutSpec(
+                slide_index=slide.index,
+                total_slides=total_slides,
+                role=slide.role,
+                theme=theme,
+                visual_mode="editorial",
+                font_style=theme_system["font_style"],
+                variant=variant,
+                text_position="top",
+                badge_text=theme_system["eyebrows"].get(slide.role, "Суть"),
+                title=slide.title,
+                body=slide.body,
+                highlight_words=slide.emphasis,
+                density=slide.density,
+                show_progress=total_slides > 1,
+                section_label=_editorial_section_label(slide, variant),
+                section_number=f"{slide.index:02d}",
+                watermark_number=f"{slide.index:02d}",
+                footer_tags=_build_editorial_tags(slide),
+                accent_spans=slide.emphasis or _infer_editorial_accent_spans(slide),
+                brand_mark="",
+                progress_style="line",
+                supporting_cards=_build_editorial_supporting_cards(slide, variant),
+            )
+        )
+    return specs
+
+
+def _build_brief_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
+    theme = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "founder_brief"
+    theme_system = THEME_SYSTEMS[theme]
+    total_slides = len(plan.slides)
+
+    specs: list[LayoutSpec] = []
+    for slide in plan.slides:
+        variant = _choose_brief_variant(slide, total_slides)
+        specs.append(
+            LayoutSpec(
+                slide_index=slide.index,
+                total_slides=total_slides,
+                role=slide.role,
+                theme=theme,
+                visual_mode="brief",
+                font_style=theme_system["font_style"],
+                variant=variant,
+                text_position="top",
+                badge_text=theme_system["eyebrows"].get(slide.role, "Суть"),
+                title=slide.title,
+                body=slide.body,
+                highlight_words=slide.emphasis,
+                density=slide.density,
+                show_progress=total_slides > 1,
+                section_label=_brief_section_label(slide, variant),
+                section_number=f"{slide.index:02d}",
+                watermark_number=f"{slide.index:02d}",
+                footer_tags=_build_editorial_tags(slide),
+                accent_spans=slide.emphasis or _infer_editorial_accent_spans(slide),
+                progress_style="line",
+                supporting_cards=_build_brief_supporting_cards(slide, variant),
+            )
+        )
+    return specs
+
+
+def _build_data_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
+    theme = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "research_mono"
+    theme_system = THEME_SYSTEMS[theme]
+    total_slides = len(plan.slides)
+
+    specs: list[LayoutSpec] = []
+    for slide in plan.slides:
+        variant = _choose_data_variant(slide, total_slides)
+        stat = _extract_stat_token(" ".join([slide.title, slide.body]))
+        supporting_cards = _build_data_supporting_cards(slide, variant, stat)
+        specs.append(
+            LayoutSpec(
+                slide_index=slide.index,
+                total_slides=total_slides,
+                role=slide.role,
+                theme=theme,
+                visual_mode="data",
+                font_style=theme_system["font_style"],
+                variant=variant,
+                text_position="top",
+                badge_text=theme_system["eyebrows"].get(slide.role, "Факт"),
+                title=slide.title,
+                body=slide.body,
+                highlight_words=slide.emphasis,
+                density=slide.density,
+                show_progress=total_slides > 1,
+                section_label=_data_section_label(slide, variant),
+                section_number=f"{slide.index:02d}",
+                watermark_number=stat or f"{slide.index:02d}",
+                footer_tags=_build_editorial_tags(slide),
+                accent_spans=slide.emphasis or ([stat] if stat else _infer_editorial_accent_spans(slide)),
+                progress_style="line",
+                supporting_cards=supporting_cards,
+            )
+        )
+    return specs
+
+
+def enforce_default_cta_slide(plan: CarouselPlan, visual_mode: str = "classic") -> CarouselPlan:
     if not plan.slides:
         return plan
 
+    resolved_mode = resolve_visual_mode(plan, visual_mode).resolved_mode
+    title = DEFAULT_CTA_TITLE if resolved_mode == "classic" else EDITORIAL_CTA_TITLE
+    body = DEFAULT_CTA_BODY if resolved_mode == "classic" else EDITORIAL_CTA_BODY
     last_index = len(plan.slides)
     updated_last = replace(
         plan.slides[-1],
         index=last_index,
         role="cta",
-        title=DEFAULT_CTA_TITLE,
-        body=DEFAULT_CTA_BODY,
+        title=title,
+        body=body,
         emphasis=[],
         density="low",
     )
@@ -307,6 +545,7 @@ def parse_carousel_plan(raw_plan: dict) -> CarouselPlan:
                 emphasis=_normalize_list(slide.get("emphasis")),
                 density=str(slide.get("density", "medium")),
                 theme_hint=str(slide.get("theme_hint", raw_plan.get("carousel", {}).get("theme_hint", "business_dark"))),
+                supporting_cards=_normalize_supporting_cards(slide.get("supporting_cards")),
             )
         )
 
@@ -348,6 +587,7 @@ def build_fallback_instagram_plan(slides_content: list[dict], theme_hint: str = 
                 emphasis=emphasis,
                 density=density,
                 theme_hint=theme_hint,
+                supporting_cards=_normalize_supporting_cards(slide.get("supporting_cards")),
             )
         )
 
@@ -379,6 +619,41 @@ def _choose_variant(role: str, density: str, index: int, total_slides: int) -> s
     return "editorial"
 
 
+def _choose_editorial_variant(slide: SlidePlanEntry, total_slides: int) -> str:
+    if slide.index == 1:
+        return "editorial_cover"
+    if slide.index == total_slides:
+        return "editorial_soft_cta"
+    stat_signal = bool(_meaningful_number_matches(" ".join([slide.title or "", slide.body or ""])))
+    if stat_signal:
+        return "editorial_stat"
+    if slide.role in {"context", "checklist"}:
+        return "editorial_scenario"
+    return "editorial_story"
+
+
+def _choose_brief_variant(slide: SlidePlanEntry, total_slides: int) -> str:
+    if slide.index == 1:
+        return "brief_cover"
+    if slide.index == total_slides or slide.role == "cta":
+        return "brief_cta"
+    if slide.role in {"context", "checklist"}:
+        return "brief_decision"
+    return "brief_insight"
+
+
+def _choose_data_variant(slide: SlidePlanEntry, total_slides: int) -> str:
+    if slide.index == 1:
+        return "data_cover"
+    if slide.index == total_slides or slide.role == "cta":
+        return "data_cta"
+    if _extract_stat_token(" ".join([slide.title, slide.body])):
+        return "data_stat"
+    if slide.role in {"context", "checklist"}:
+        return "data_protocol"
+    return "data_insight"
+
+
 def _choose_text_position(variant: str, role: str) -> str:
     if variant in {"cover", "closing", "stat_focus", "quote"}:
         return "center"
@@ -393,10 +668,198 @@ def _build_supporting_cards(body: str, variant: str) -> list[dict]:
     return []
 
 
+def _editorial_section_label(slide: SlidePlanEntry, variant: str) -> str:
+    if variant == "editorial_cover":
+        return "INTRO"
+    if variant == "editorial_stat":
+        return "ЧТО ЭТО"
+    if variant == "editorial_soft_cta":
+        return "ФИНАЛ"
+    mapping = {
+        "context": "СЦЕНАРИЙ",
+        "proof": "ФАКТ",
+        "example": "КЕЙС",
+        "checklist": "СЛОИ",
+        "point": "ТЕЗИС",
+        "cta": "ФИНАЛ",
+    }
+    return mapping.get(slide.role, "СЦЕНАРИЙ")
+
+
+def _brief_section_label(slide: SlidePlanEntry, variant: str) -> str:
+    if variant == "brief_cover":
+        return "MEMO"
+    if variant == "brief_cta":
+        return "NEXT"
+    mapping = {
+        "context": "CONTEXT",
+        "proof": "EVIDENCE",
+        "example": "CASE",
+        "checklist": "OPERATING",
+        "point": "DECISION",
+    }
+    return mapping.get(slide.role, "INSIGHT")
+
+
+def _data_section_label(slide: SlidePlanEntry, variant: str) -> str:
+    if variant == "data_cover":
+        return "SIGNAL"
+    if variant == "data_stat":
+        return "METRIC"
+    if variant == "data_cta":
+        return "SAVE"
+    if variant == "data_protocol":
+        return "METHOD"
+    return "DETAIL"
+
+
+def _build_editorial_supporting_cards(slide: SlidePlanEntry, variant: str) -> list[dict]:
+    cards = _validated_llm_supporting_cards(slide)
+    if cards:
+        return cards
+    if variant == "editorial_stat":
+        stat = _extract_stat_token(" ".join([slide.title, slide.body]))
+        return [{"title": stat or "Факт", "body": "ключевой факт"}]
+    if variant == "editorial_cover":
+        return []
+    return []
+
+
+def _build_brief_supporting_cards(slide: SlidePlanEntry, variant: str) -> list[dict]:
+    return _validated_llm_supporting_cards(slide)
+
+
+def _build_data_supporting_cards(slide: SlidePlanEntry, variant: str, stat: str) -> list[dict]:
+    cards = _validated_llm_supporting_cards(slide)
+    if cards:
+        return cards
+    if variant == "data_stat":
+        return [
+            {"title": stat or "metric", "body": "ключевой показатель"},
+        ]
+    return []
+
+
+def _build_editorial_tags(slide: SlidePlanEntry) -> list[str]:
+    source = " ".join(part for part in (slide.title or "", slide.body or "") if part).strip()
+    priority_matches: list[str] = []
+    priority_patterns = [
+        r"\bapi key\b",
+        r"\bbase url\b",
+        r"\bemail\b",
+        r"\botp\b",
+        r"\bcursor\b",
+        r"\bzed\b",
+        r"\bopencode\b",
+        r"\bhermes\b",
+        r"\bopenclaw\b",
+        r"\bnvidia\b",
+        r"\bdeepseek\b",
+        r"\bbuild\.nvidia\.com\b",
+        r"\bopenai-compatible\b",
+        r"вычислен\w+",
+        r"лидер\w+",
+    ]
+    lowered = source.lower()
+    for pattern in priority_patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            value = match.group(0)
+            if value not in priority_matches:
+                priority_matches.append(value)
+        if len(priority_matches) == 4:
+            return priority_matches
+
+    stopwords = {
+        "и", "а", "но", "для", "через", "после", "в", "на", "по", "из", "не", "это",
+        "как", "что", "или", "без", "под", "над", "при", "от", "до", "уже", "просто",
+        "который", "которая", "которые", "рынка", "разбираем", "меняете", "только",
+        "достаточно", "указать", "вставить", "выбрать", "можно", "модели", "модель",
+        "здесь", "открытая", "закрытые",
+    }
+    tokens = re.findall(r"[A-Za-zА-Яа-я0-9.+-]{3,}", source)
+    tags: list[str] = []
+    for token in tokens:
+        normalized = token.lower().strip(".")
+        if normalized in stopwords:
+            continue
+        if normalized.isdigit():
+            continue
+        if re.fullmatch(r"v\d+(?:\.\d+)?", normalized):
+            continue
+        if len(normalized) > 18:
+            continue
+        if normalized not in tags and normalized not in priority_matches:
+            tags.append(normalized)
+        if len(priority_matches) + len(tags) >= 4:
+            break
+    merged = priority_matches + [tag for tag in tags if tag not in priority_matches]
+    return (merged[:4]) or [slide.role.lower()]
+
+
+def _infer_editorial_accent_spans(slide: SlidePlanEntry) -> list[str]:
+    for source in (slide.title, slide.body):
+        parts = [part.strip() for part in re.split(r"[,.\n]", source or "") if part.strip()]
+        for part in parts:
+            if 6 <= len(part) <= 42:
+                return [part]
+    return []
+
+
 def _normalize_list(value) -> list[str]:
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
     return []
+
+
+def _normalize_supporting_cards(value) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    cards: list[dict] = []
+    for item in value[:3]:
+        if not isinstance(item, dict):
+            continue
+        title = _trim_text(str(item.get("title") or item.get("label") or "").strip(), 18)
+        body = _trim_text(str(item.get("body") or item.get("value") or "").strip(), 54)
+        if title and body:
+            cards.append({"title": title, "body": body})
+    return cards
+
+
+def _validated_llm_supporting_cards(slide: SlidePlanEntry) -> list[dict]:
+    cards: list[dict] = []
+    source_title = _normalize_for_overlap(slide.title)
+    source_body = _normalize_for_overlap(slide.body)
+    for card in slide.supporting_cards[:3]:
+        title = _trim_text(str(card.get("title", "")).strip(), 18)
+        body = _trim_text(str(card.get("body", "")).strip(), 54)
+        if not title or not body:
+            continue
+        if "…" in title or "…" in body:
+            continue
+        normalized_body = _normalize_for_overlap(body)
+        if not normalized_body:
+            continue
+        if normalized_body in source_title or normalized_body in source_body:
+            continue
+        if _overlap_ratio(normalized_body, source_body) > 0.72:
+            continue
+        cards.append({"title": title, "body": body})
+    return cards
+
+
+def _normalize_for_overlap(text: str) -> str:
+    text = re.sub(r"[^A-Za-zА-Яа-я0-9 ]+", " ", (text or "").lower())
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _overlap_ratio(short_text: str, long_text: str) -> float:
+    short_words = {word for word in short_text.split() if len(word) > 2}
+    long_words = {word for word in long_text.split() if len(word) > 2}
+    if not short_words or not long_words:
+        return 0.0
+    return len(short_words & long_words) / len(short_words)
 
 
 def _extract_sentences(text: str) -> list[str]:
@@ -407,6 +870,43 @@ def _extract_sentences(text: str) -> list[str]:
 def _extract_phrases(text: str, limit: int) -> list[str]:
     parts = re.split(r"[,;]\s+|(?<=[.!?])\s+", text.strip())
     return [_trim_text(part.strip(), 44) for part in parts if part.strip()][:limit]
+
+
+def _extract_stat_token(text: str) -> str:
+    matches = _meaningful_number_matches(text)
+    if not matches:
+        return ""
+    return matches[0].strip()
+
+
+def _meaningful_number_matches(text: str) -> list[str]:
+    cleaned = re.sub(r"https?://\S+", " ", text or "")
+    cleaned = re.sub(r"\b[a-z]{1,8}/v\d+(?:\.\d+)?\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bv\d+(?:\.\d+)?\b", " ", cleaned, flags=re.IGNORECASE)
+    pattern = re.compile(
+        r"(?<![\w/])\d{2,}(?:[.,]\d+)?(?:\s?(?:тыс(?:яч)?|млн|млрд|%|x|к|k|m|b))?(?![\w/])",
+        re.IGNORECASE,
+    )
+    return [match.group(0) for match in pattern.finditer(cleaned)]
+
+
+def _plan_corpus(plan: CarouselPlan) -> str:
+    return " ".join(
+        [
+            plan.goal,
+            plan.audience,
+            plan.tone,
+            plan.cta,
+            plan.theme_hint,
+            " ".join(slide.role for slide in plan.slides),
+            " ".join(slide.title for slide in plan.slides),
+            " ".join(slide.body for slide in plan.slides),
+        ]
+    ).lower()
+
+
+def _count_matches(corpus: str, needles: list[str]) -> int:
+    return sum(1 for needle in needles if needle in corpus)
 
 
 def _trim_text(text: str, limit: int) -> str:

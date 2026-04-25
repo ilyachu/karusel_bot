@@ -116,6 +116,7 @@ class ThreadsPublisher:
             {
                 "media_type": "CAROUSEL",
                 "children": ",".join(children),
+                "text": self._truncate_text(plan.parent_text),
             }
         )
 

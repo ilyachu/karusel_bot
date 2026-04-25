@@ -37,6 +37,7 @@ from services.gemini_client import (
     generate_final_slides,
     generate_instagram_carousel_plan,
     generate_instagram_caption,
+    generate_threads_summary,
 )
 from services.export_hosting import build_public_export_info
 from services.instagram_package import build_instagram_export, update_export_metadata
@@ -44,12 +45,15 @@ from services.layout_engine import (
     DEFAULT_CTA_BODY,
     DEFAULT_CTA_TITLE,
     THEME_LABELS,
+    VISUAL_MODE_LABELS,
     apply_theme_selection_policy,
     apply_theme_override,
     build_fallback_instagram_plan,
     build_instagram_layout_specs,
     enforce_default_cta_slide,
     parse_carousel_plan,
+    resolve_preset_visual_profile,
+    resolve_visual_mode,
 )
 from services.html_renderer import browser_binaries_hint, render_layout_spec_html
 from services.meta_publish import MetaCredentials, build_carousel_publish_plan, load_export_package
@@ -58,6 +62,11 @@ from services.threads_publisher import ThreadsPublisher
 from services.openai_speech import transcribe_voice
 from services.fal_client import generate_background
 from services.image_renderer import render_layout_spec, render_slide
+from handlers.common import (
+    INSTA_CARD_FORMAT_LABELS,
+    INSTA_REWRITE_LABELS,
+    show_insta_auto_setup,
+)
 
 router = Router()
 
@@ -66,7 +75,7 @@ router = Router()
 # --- 1. Input Handling ---
 
 # Move generic text handler to the bottom or restrict it to default state
-@router.message(F.text & ~F.text.in_({"Помощь", "Создать карусель", "🚀 Insta Auto", "⚡️ Быстрый режим", "/start", "/help", "/cancel"}), StateFilter(None))
+@router.message(F.text & ~F.text.in_({"Помощь", "Создать карусель", "🚀 Insta Auto", "🖼 Обложка", "⚡️ Быстрый режим", "/start", "/help", "/cancel"}), StateFilter(None))
 async def handle_text_input(message: types.Message, state: FSMContext):
     # Validate text length
     is_valid, error_msg = validate_text_length(message.text)
@@ -180,6 +189,48 @@ async def insta_auto_forward(message: types.Message, state: FSMContext):
     await run_insta_auto_pipeline(message, text, state)
 
 
+@router.message(CarouselFlow.insta_auto_waiting_for_background, F.photo | F.document)
+async def insta_auto_custom_background(message: types.Message, state: FSMContext, bot):
+    if message.document:
+        if not message.document.mime_type or not message.document.mime_type.startswith("image/"):
+            await message.answer("⚠️ Нужна именно картинка: фото или файл изображения.")
+            return
+        file_id = message.document.file_id
+        file_size = message.document.file_size or 0
+    else:
+        photo = message.photo[-1]
+        file_id = photo.file_id
+        file_size = photo.file_size or 0
+
+    if file_size:
+        is_valid, error_msg = validate_file_size(file_size)
+        if not is_valid:
+            await message.answer(error_msg)
+            return
+
+    file = await bot.get_file(file_id)
+    file_bytes = BytesIO()
+    await bot.download_file(file.file_path, file_bytes)
+    file_bytes.seek(0)
+
+    await state.update_data(
+        insta_custom_bg_bytes=file_bytes.getvalue(),
+        insta_visual_preset="custom",
+    )
+    await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
+    await message.answer("✅ Фон загружен. Теперь можно отправить текст или поменять настройки.")
+    await show_insta_auto_setup(message, state)
+
+
+@router.message(CarouselFlow.insta_auto_waiting_for_background, F.text)
+async def insta_auto_background_text_fallback(message: types.Message, state: FSMContext):
+    if message.text == "/cancel":
+        await state.clear()
+        await message.answer("❌ Действие отменено.")
+        return
+    await message.answer("📎 Сейчас жду картинку для фона. Отправьте фото или нажмите «Назад к настройкам».")
+
+
 async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMContext):
     is_valid, error_msg = validate_text_length(text)
     if not is_valid:
@@ -189,12 +240,14 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     await state.update_data(base_text=text)
     status = await message.answer("🚀 Собираю Insta-ready карусель...")
     await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
+    data = await state.get_data()
+    rewrite_style = data.get("insta_rewrite_style", "concise")
 
     analysis = await analyze_text_and_propose_slides(text)
     recommended = analysis.get("recommended_slides", 6)
     target_slides = max(4, min(7, recommended))
 
-    raw_plan = await generate_instagram_carousel_plan(text, target_slides)
+    raw_plan = await generate_instagram_carousel_plan(text, target_slides, rewrite_style)
     if raw_plan:
         carousel_plan = parse_carousel_plan(raw_plan)
         slides_content = [
@@ -202,7 +255,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             for slide in carousel_plan.slides
         ]
     else:
-        slides_content = await generate_final_slides(text, target_slides, "marketing")
+        slides_content = await generate_final_slides(text, target_slides, rewrite_style)
 
     if not slides_content:
         await status.edit_text("😔 Не удалось собрать тексты для карусели.")
@@ -210,41 +263,54 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
 
     if not raw_plan:
         carousel_plan = build_fallback_instagram_plan(slides_content)
-    carousel_plan = enforce_default_cta_slide(carousel_plan)
+    visual_mode = data.get("insta_visual_mode", "auto")
+    carousel_plan = enforce_default_cta_slide(carousel_plan, visual_mode=visual_mode)
     slides_content = [
         {"title": slide.title, "body": slide.body}
         for slide in carousel_plan.slides
     ]
-    data = await state.get_data()
     theme_override = data.get("insta_theme_override", "auto")
     if theme_override and theme_override != "auto":
         carousel_plan, theme_decision = apply_theme_override(carousel_plan, theme_override)
     else:
         carousel_plan, theme_decision = apply_theme_selection_policy(carousel_plan, text)
 
+    visual_decision = resolve_visual_mode(carousel_plan, visual_mode)
     caption = await generate_instagram_caption(text, slides_content)
+    threads_summary = await generate_threads_summary(text, slides_content, caption)
     user_logo = get_user_logo(message.chat.id)
-    layout_specs = build_instagram_layout_specs(carousel_plan)
+    layout_specs = build_instagram_layout_specs(carousel_plan, visual_mode=visual_mode)
+    custom_bg_bytes = data.get("insta_custom_bg_bytes")
 
     rendered_buffers: list[BytesIO] = []
     media_group = []
     render_mode = "html"
     for layout_spec in layout_specs:
-        try:
-            rendered_bytes = await asyncio.to_thread(
-                render_layout_spec_html,
+        if custom_bg_bytes:
+            render_mode = "pillow-custom-bg"
+            image_buffer = await asyncio.to_thread(
+                render_layout_spec,
                 layout_spec,
                 user_logo,
-            )
-        except Exception as exc:
-            logging.warning("HTML renderer unavailable, falling back to Pillow: %s", exc)
-            render_mode = "pillow-fallback"
-            image_buffer = render_layout_spec(
-                layout_spec,
-                logo_text=user_logo,
-                bg_source=None,
+                BytesIO(custom_bg_bytes),
             )
             rendered_bytes = image_buffer.getvalue()
+        else:
+            try:
+                rendered_bytes = await asyncio.to_thread(
+                    render_layout_spec_html,
+                    layout_spec,
+                    user_logo,
+                )
+            except Exception as exc:
+                logging.warning("HTML renderer unavailable, falling back to Pillow: %s", exc)
+                render_mode = "pillow-fallback"
+                image_buffer = render_layout_spec(
+                    layout_spec,
+                    logo_text=user_logo,
+                    bg_source=None,
+                )
+                rendered_bytes = image_buffer.getvalue()
         rendered_buffers.append(BytesIO(rendered_bytes))
         media_group.append(
             InputMediaPhoto(
@@ -265,6 +331,12 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             "layout_specs": [spec.to_dict() for spec in layout_specs],
             "render_mode": render_mode,
             "theme_decision": theme_decision.to_dict() if theme_decision else None,
+            "visual_mode": visual_mode,
+            "resolved_visual_mode": visual_decision.resolved_mode,
+            "visual_decision": visual_decision.to_dict(),
+            "rewrite_style": rewrite_style,
+            "custom_background": bool(custom_bg_bytes),
+            "threads_summary": threads_summary,
         },
     )
     export_package = load_export_package(export_dir)
@@ -306,16 +378,17 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     )
 
     caption_preview = caption if len(caption) <= 1200 else caption[:1200] + "..."
+    card_format = data.get("insta_card_format", "auto")
     await message.answer(
-        "✅ Insta-ready карусель готова.\n\n"
+        "✅ Карусель готова.\n\n"
         f"Слайдов: {len(slides_content)}\n"
-        f"Тема: {carousel_plan.theme_hint}\n"
-        f"Theme mode: {THEME_LABELS.get(theme_override, '🧠 Auto')}\n"
-        f"Тон: {carousel_plan.tone}\n"
-        f"Policy: {theme_decision.reason}\n"
+        f"Подача текста: {INSTA_REWRITE_LABELS.get(rewrite_style, 'Коротко и ясно')}\n"
+        f"Формат карточек: {INSTA_CARD_FORMAT_LABELS.get(card_format, 'Авто')}\n"
+        f"Визуал: {VISUAL_MODE_LABELS.get(visual_decision.resolved_mode, visual_decision.resolved_mode)}"
+        f"{' + свой фон' if custom_bg_bytes else ''}\n"
         f"Рендер: {render_mode}\n"
-        f"Export: {export_dir}\n\n"
-        f"Caption:\n{caption_preview}",
+        f"Экспорт: {export_id}\n\n"
+        f"Подпись:\n{caption_preview}",
         reply_markup=actions,
     )
     if render_mode != "html":
@@ -635,11 +708,13 @@ async def preview_ok(callback: types.CallbackQuery, state: FSMContext):
     await ask_visual_method(callback.message, state)
 
 async def ask_visual_method(message: types.Message, state: FSMContext):
-    message_text = add_step_indicator("Выбор фона\n\nКак будем делать фон?", current_step=4)
+    message_text = add_step_indicator(
+        "Выбор визуала\n\nВыберите готовый шаблон или загрузите свой фон.",
+        current_step=4,
+    )
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 Генерация (AI)", callback_data="visual_gen")],
-        [InlineKeyboardButton(text="🖼 Пресеты (Готовые)", callback_data="visual_preset")],
+        [InlineKeyboardButton(text="🖼 Готовые шаблоны", callback_data="visual_preset")],
         [InlineKeyboardButton(text="📸 Свой фон", callback_data="visual_custom")]
     ])
     kb = add_back_button(kb, callback_data="back_to_preview")
@@ -656,19 +731,11 @@ async def ask_visual_method(message: types.Message, state: FSMContext):
 
 @router.callback_query(CarouselFlow.choosing_visual_method, F.data == "visual_gen")
 async def visual_gen_chosen(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
-    
-    # Show styles + Custom
-    buttons = []
-    for key, style in BACKGROUND_STYLES.items():
-        buttons.append([InlineKeyboardButton(text=style["title"], callback_data=f"genstyle_{key}")])
-    
-    buttons.append([InlineKeyboardButton(text="✨ Свой промт", callback_data="genstyle_custom")])
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-    kb = add_back_button(kb, callback_data="back_to_visual_method")
-    await callback.message.edit_text("Выберите стиль генерации или напишите свой промт:", reply_markup=kb)
-    await state.set_state(CarouselFlow.choosing_gen_style)
+    await callback.answer(
+        "AI-генерация фона временно убрана. Доступны готовые шаблоны и свой фон.",
+        show_alert=True,
+    )
+    await ask_visual_method(callback.message, state)
 
 @router.callback_query(CarouselFlow.choosing_visual_method, F.data == "visual_preset")
 async def visual_preset_chosen(callback: types.CallbackQuery, state: FSMContext):
@@ -681,7 +748,10 @@ async def visual_preset_chosen(callback: types.CallbackQuery, state: FSMContext)
         
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     kb = add_back_button(kb, callback_data="back_to_visual_method")
-    await callback.message.edit_text("Выберите готовый фон:", reply_markup=kb)
+    await callback.message.edit_text(
+        "Выберите готовый шаблон. Текст будет сверстан в новом формате, без старой схемы «фон + блок текста».",
+        reply_markup=kb,
+    )
     await state.set_state(CarouselFlow.choosing_preset)
 
 @router.callback_query(CarouselFlow.choosing_visual_method, F.data == "visual_custom")
@@ -815,9 +885,22 @@ async def preset_chosen(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     key = callback.data.replace("preset_", "", 1)
     preset = PRESETS.get(key)
-    
-    await state.update_data(bg_type="preset", preset_url=preset["url"])
-    await ask_text_position(callback.message, state)
+    if not preset:
+        await callback.message.edit_text("😔 Шаблон не найден. Попробуйте выбрать другой.")
+        return
+
+    profile = resolve_preset_visual_profile(key)
+    await state.update_data(
+        bg_type="preset",
+        preset_key=key,
+        preset_url=preset["url"],
+        preset_profile=profile,
+    )
+    await callback.message.edit_text(
+        f"🎨 Собираю карусель по шаблону «{preset['title']}»..."
+    )
+    await state.set_state(CarouselFlow.processing)
+    await generate_carousel(callback.message, state, user_id=callback.from_user.id)
 
 # --- 7. Text Position & Final Generation ---
 
@@ -1020,6 +1103,17 @@ async def generate_carousel(message: types.Message, state: FSMContext, user_id: 
     cover_bytes = data.get("cover_image_bytes")
     
     logging.info(f"Generating carousel. Slides: {len(slides_content)}, BG: {bg_type}, Cover: {has_custom_cover}, CoverBytes: {len(cover_bytes) if cover_bytes else 0}")
+
+    if bg_type == "preset":
+        await _generate_template_carousel(
+            message=message,
+            state=state,
+            slides_content=slides_content,
+            user_logo=user_logo,
+            preset_key=data.get("preset_key", "lofi"),
+            preset_title=PRESETS.get(data.get("preset_key", ""), {}).get("title", "Готовый шаблон"),
+        )
+        return
     
     media_group = []
     total_slides = len(slides_content)
@@ -1115,13 +1209,87 @@ async def generate_carousel(message: types.Message, state: FSMContext, user_id: 
     # Clean up state to prevent memory leaks
     await state.clear()
 
+
+async def _generate_template_carousel(
+    message: types.Message,
+    state: FSMContext,
+    slides_content: list[dict],
+    user_logo: str,
+    preset_key: str,
+    preset_title: str,
+):
+    if not slides_content:
+        await message.edit_text("😔 Не нашел тексты слайдов для сборки.")
+        await state.clear()
+        return
+
+    profile = resolve_preset_visual_profile(preset_key)
+    theme = profile["theme"]
+    visual_mode = profile["visual_mode"]
+    plan = build_fallback_instagram_plan(slides_content, theme_hint=theme)
+    specs = build_instagram_layout_specs(plan, visual_mode=visual_mode)
+
+    media_group = []
+    render_mode = "html"
+    for spec in specs:
+        await message.edit_text(
+            f"🎨 Рисую слайд {spec.slide_index} из {spec.total_slides}...\n"
+            f"Шаблон: {preset_title}"
+        )
+        try:
+            rendered_bytes = await asyncio.to_thread(
+                render_layout_spec_html,
+                spec,
+                user_logo,
+            )
+        except Exception as exc:
+            logging.warning("Template HTML renderer unavailable, falling back to Pillow: %s", exc)
+            render_mode = "pillow-fallback"
+            image_buffer = render_layout_spec(
+                spec,
+                logo_text=user_logo,
+                bg_source=None,
+            )
+            rendered_bytes = image_buffer.getvalue()
+
+        media_group.append(
+            InputMediaPhoto(
+                media=BufferedInputFile(
+                    rendered_bytes,
+                    filename=f"template_slide_{spec.slide_index}.png",
+                )
+            )
+        )
+
+    if media_group:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        await message.answer_media_group(media_group)
+        await message.answer(
+            "✨ Готово! 🚀\n\n"
+            f"Шаблон: {preset_title}\n"
+            f"Визуал: {VISUAL_MODE_LABELS.get(visual_mode, visual_mode)}"
+            f" · {profile['label']}"
+        )
+        if render_mode != "html":
+            await message.answer(browser_binaries_hint())
+    else:
+        await message.edit_text("😔 Не удалось создать слайды.")
+
+    await state.clear()
+
 # --- Fast Mode Handlers ---
 
 @router.message(F.text == "⚡️ Быстрый режим")
 async def fast_mode_start(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer("⚡️ Быстрый режим!\n\nОтправьте мне текст, голосовое или перешлите пост.")
-    await state.set_state(CarouselFlow.fast_mode_waiting_for_text)
+    await message.answer(
+        "⚡️ Быстрый режим временно убран, чтобы не дублировать основной сценарий.\n\n"
+        "Используйте `Создать карусель` или `🚀 Insta Auto`.",
+        parse_mode="Markdown",
+    )
 
 @router.message(CarouselFlow.fast_mode_waiting_for_text, F.text)
 async def fast_handle_text(message: types.Message, state: FSMContext):

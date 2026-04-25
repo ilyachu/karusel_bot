@@ -4,6 +4,7 @@ import os
 import re
 
 from openai import AsyncOpenAI
+from services.cover_renderer import normalize_cover_plan
 
 from config import (
     OPENAI_API_KEY,
@@ -157,7 +158,114 @@ async def generate_instagram_caption(base_text: str, slides_content: list[dict])
         return "Сохрани этот пост, чтобы вернуться к нему позже.\n\n#instagram #carousel #ai #opensource"
 
 
-async def generate_instagram_carousel_plan(base_text: str, target_slides_count: int) -> dict:
+async def generate_threads_summary(base_text: str, slides_content: list[dict], caption: str = "") -> str:
+    slides_summary = "\n".join(
+        f"- {slide.get('title', '').strip()}: {slide.get('body', '').strip()}"
+        for slide in slides_content
+    )
+
+    prompt = f"""Ты — редактор Threads.
+
+Напиши короткий parent post для карусели на русском.
+
+Задача: это должен быть самостоятельный мини-пост о сути новости/разбора, а не пересказ слайдов.
+
+Формат:
+1. 1–2 предложения.
+2. До 220 символов.
+3. Без хэштегов, emoji, markdown, CTA, "сохрани", "листай", "подпишись".
+4. Не копируй заголовки слайдов дословно.
+5. Не склеивай обрывки карточек.
+6. Пиши как новостной/продуктовый анонс: что произошло + почему это важно.
+7. Сохраняй названия продуктов, цифры и API-термины, если они важны.
+8. Не придумывай факты, которых нет в исходнике.
+9. Пиши `ИИ`, а не `AI`, если это не часть названия продукта.
+
+Исходный текст:
+{base_text}
+
+Слайды:
+{slides_summary}
+
+Instagram caption, только как дополнительный контекст:
+{caption}
+"""
+
+    try:
+        text_result = await _router_text_request(prompt)
+        return _sanitize_threads_summary(await _normalize_caption_language(base_text, text_result))
+    except Exception as e:
+        logging.error(f"Error in generate_threads_summary: {e}")
+
+    try:
+        text_result = await _openai_text_request(prompt)
+        return _sanitize_threads_summary(await _normalize_caption_language(base_text, text_result))
+    except Exception as fallback_error:
+        logging.error(f"OpenAI fallback failed in generate_threads_summary: {fallback_error}")
+        return ""
+
+
+async def generate_cover_plan(base_text: str, style: str, format_key: str) -> dict:
+    prompt = f"""Ты — арт-директор обложек для соцсетей.
+
+Собери JSON-план одной типографической обложки и верни только JSON:
+{{
+  "headline": "2-6 слов, главный poster headline",
+  "subtitle": "короткое пояснение, можно пустую строку",
+  "eyebrow_left": "РАЗБОР · № 01",
+  "eyebrow_right": "POSTER · TODAY",
+  "footer_left": "ДЛЯ КОГО / КОНТЕКСТ",
+  "symbol": "arrow | asterisk | slash | dot"
+}}
+
+Стиль: {style}
+Формат: {format_key}
+
+Требования:
+1. Язык: русский, кроме названий продуктов/брендов.
+2. Headline должен быть коротким, мощным и пригодным для огромной типографики.
+3. Не делай caption, CTA, хэштеги, emoji, "сохрани", "листай", "подпишись".
+4. Не копируй весь исходный текст; выбери одну главную мысль.
+5. Для poster-стилей можно смешивать RU/EN как в техно-постерах.
+6. Для retro_polaroid пиши коротко и атмосферно: это film burn / scratched film фон, не полароид.
+7. Для blue_type делай очень короткий headline на 2-5 слов, вопрос или тезис под огромную синюю типографику.
+8. Для grid_steps делай action/headline, который хорошо ложится лестницей: 3-6 слов.
+9. Для blur_field делай фразу-плакат, можно чуть более эмоциональную, но без кликбейта.
+10. Не возвращай footer_right: он задаётся кодом как chu_il.
+
+Исходный текст:
+{base_text}
+"""
+
+    try:
+        result = await _router_json_request(prompt)
+    except Exception as e:
+        logging.error(f"Error in generate_cover_plan: {e}")
+        result = {}
+
+    if not result:
+        try:
+            result = await _openai_json_request(prompt)
+        except Exception as fallback_error:
+            logging.error(f"OpenAI fallback failed in generate_cover_plan: {fallback_error}")
+            result = {}
+
+    return normalize_cover_plan(result, base_text, style, format_key).to_dict()
+
+
+async def generate_instagram_carousel_plan(
+    base_text: str,
+    target_slides_count: int,
+    rewrite_style: str = "concise",
+) -> dict:
+    style_instructions = {
+        "exact": "бережно сохраняй исходные мысли и формулировки, только упакуй их в слайды",
+        "marketing": "сделай подачу сильнее и убедительнее, но без рекламной шелухи и клише",
+        "educational": "объясняй структурно, как понятный мини-разбор по шагам",
+        "concise": "пиши коротко, ясно и без воды",
+    }
+    style_instruction = style_instructions.get(rewrite_style, style_instructions["concise"])
+
     prompt = f"""Ты — контент-стратег Instagram-каруселей.
 
 Собери JSON-план карусели из {target_slides_count} слайдов и верни только JSON:
@@ -176,6 +284,9 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
       "title": "короткий заголовок",
       "body": "текст слайда",
       "emphasis": ["ключевой акцент"],
+      "supporting_cards": [
+        {{"title": "короткая метка", "body": "новый микро-тезис"}}
+      ],
       "density": "low | medium | high",
       "theme_hint": "business_dark | minimal_light | creator_bold | editorial_premium | memory_archive | founder_brief | growth_black | research_mono"
     }}
@@ -191,6 +302,14 @@ async def generate_instagram_carousel_plan(base_text: str, target_slides_count: 
 6. Выбирай `theme_hint` осознанно.
 7. Не переходи на английский, кроме названий продуктов и брендов.
 8. Пиши `ИИ`, а не `AI`, если это не часть названия продукта.
+9. `supporting_cards` — это нижняя supporting zone, а не пересказ body:
+   - 0–3 карточки на слайд.
+   - `title`: 1–2 слова, например "выбор", "цена", "риск", "вывод".
+   - `body`: до 6 слов, законченная мысль без многоточий.
+   - Нельзя копировать фразы из `title` или `body`.
+   - Не режь предложения посередине.
+   - Если нет нового полезного микро-тезиса, верни пустой список.
+10. Подача текста: {style_instruction}.
 
 Исходный текст:
 {base_text}
@@ -311,6 +430,14 @@ async def _normalize_carousel_plan_language(source_text: str, plan: dict) -> dic
             "emphasis": [
                 _normalize_russian_phrase(str(item)) for item in slide.get("emphasis", [])
             ],
+            "supporting_cards": [
+                {
+                    "title": _normalize_russian_phrase(str(card.get("title", card.get("label", "")))),
+                    "body": _normalize_russian_phrase(str(card.get("body", card.get("value", "")))),
+                }
+                for card in slide.get("supporting_cards", [])
+                if isinstance(card, dict)
+            ][:3],
         }
         for slide in plan.get("slides", [])
     ]
@@ -321,6 +448,24 @@ async def _normalize_caption_language(source_text: str, caption: str) -> str:
     if not _is_russian_source(source_text):
         return caption
     return _normalize_russian_phrase(caption)
+
+
+def _sanitize_threads_summary(text: str) -> str:
+    text = re.sub(r"#\w+", "", text or "")
+    text = re.sub(r"[*_`>#]+", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(
+        r"\b(?:сохрани|листай|подпишись|подписывайся|share|follow|save)\b.*$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    ).strip(" ,.;:-")
+    if len(text) <= 220:
+        return text
+    clipped = text[:219].rstrip()
+    if " " in clipped:
+        clipped = clipped.rsplit(" ", 1)[0]
+    return clipped.rstrip(" ,.;:-") + "…"
 
 
 def _normalize_russian_phrase(text: str) -> str:

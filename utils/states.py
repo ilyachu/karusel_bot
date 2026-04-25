@@ -2,6 +2,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class CarouselFlow(StatesGroup):
     insta_auto_waiting_for_text = State()
+    insta_auto_waiting_for_background = State()
     waiting_for_text_confirmation = State()
     choosing_slide_count = State()
     choosing_rewrite_style = State() # New: Exact, Marketing, etc.
@@ -18,6 +19,14 @@ class CarouselFlow(StatesGroup):
     choosing_text_position = State() # New: Top, Center, Bottom
     choosing_text_position = State() # New: Top, Center, Bottom
     processing = State()
+
+    # Standalone cover generator
+    cover_waiting_for_text = State()
+    cover_choosing_style = State()
+    cover_choosing_background = State()
+    cover_waiting_for_background = State()
+    cover_choosing_format = State()
+    cover_processing = State()
 
     # Fast Mode States
     fast_mode_waiting_for_text = State()

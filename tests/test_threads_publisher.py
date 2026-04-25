@@ -62,7 +62,7 @@ class ThreadsPublisherTests(unittest.TestCase):
             self.assertIn("https://meta.chuchuchu.online/proxy/telegram-media?", thread_posts[0][2]["image_url"])
             self.assertIn("https://meta.chuchuchu.online/proxy/telegram-media?", thread_posts[1][2]["image_url"])
             self.assertEqual(thread_posts[2][2]["children"], "child-1,child-2")
-            self.assertNotIn("text", thread_posts[2][2])
+            self.assertEqual(thread_posts[2][2]["text"], "Carousel caption.")
 
     def _create_export_package(self, tmpdir: str, slides: int) -> Path:
         export_dir = Path(tmpdir) / "20260409-123000-42-carousel"

@@ -92,6 +92,9 @@ FONT_MAP = {
 
 
 def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
+    if spec.visual_mode in {"editorial", "brief", "data"}:
+        return _build_editorial_slide_html(spec, logo_text)
+
     tokens = THEME_TOKENS.get(spec.theme, THEME_TOKENS["business_dark"])
     font_family = FONT_MAP.get(spec.font_style, FONT_MAP["standard"])
     display_font = tokens.get("display_font", font_family)
@@ -409,6 +412,431 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
 </body>
 </html>
 """
+
+
+def _build_editorial_slide_html(spec: LayoutSpec, logo_text: str = "chu ai") -> str:
+    palette = _editorial_tokens(spec.theme, spec.visual_mode)
+    title = _apply_accent_markup(html.escape(spec.title), spec.accent_spans, palette["accent"])
+    body = _apply_accent_markup(html.escape(spec.body).replace("\n", "<br>"), spec.accent_spans, palette["accent_soft"])
+    progress_percent = int((spec.slide_index / max(spec.total_slides, 1)) * 100)
+    is_cover = spec.variant.endswith("_cover")
+    is_cta = spec.variant.endswith("_cta")
+    is_stat = spec.variant in {"editorial_stat", "data_stat"}
+    is_brief = spec.visual_mode == "brief"
+    is_data = spec.visual_mode == "data"
+    show_tags = spec.visual_mode == "editorial" and bool(spec.footer_tags)
+    tags_html = "".join(f'<div class="editorial-tag">{html.escape(tag)}</div>' for tag in spec.footer_tags[:4]) if show_tags else ""
+    rail_cards = [] if is_stat else spec.supporting_cards[:3]
+    support_html = "".join(
+        (
+            '<div class="editorial-rail-card">'
+            f'<span>{html.escape(card.get("title", ""))}</span>'
+            f'<strong>{html.escape(card.get("body", ""))}</strong>'
+            '</div>'
+        )
+        for card in rail_cards
+    )
+    variant_class = spec.variant.replace("_", "-")
+    mode_class = spec.visual_mode.replace("_", "-")
+    brand = html.escape(spec.brand_mark or logo_text)
+    show_brand = "flex" if spec.brand_mark else "none"
+    title_size = "86px" if is_cover else "74px" if is_stat else "64px" if is_brief else "62px"
+    body_max_width = "760px" if is_cover else "620px" if is_stat else "690px"
+    stage_top = "214px" if is_cover else "250px" if is_stat else "300px" if is_cta else "276px"
+    stage_bottom = "156px"
+    title_block_max_width = "840px" if is_cover else "700px" if is_stat else "650px"
+    body_margin_top = "26px" if is_cover else "20px"
+    body_font_size = "32px" if is_cover else "28px" if is_brief else "30px"
+    stat_value = html.escape((spec.supporting_cards[0].get("title", "") if spec.supporting_cards else spec.watermark_number).strip())
+    stat_detail = html.escape(
+        (spec.supporting_cards[0].get("body", "") if spec.supporting_cards else "ключевой показатель").strip()
+    )
+    stat_html = (
+        f'<div class="data-stat-block"><span>{stat_value}</span><strong>{stat_detail}</strong></div>'
+        if is_stat
+        else ""
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      width: 1080px;
+      height: 1350px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 26% 22%, {palette["glow"]}, transparent 34%),
+        radial-gradient(circle at 82% 76%, {palette["glow2"]}, transparent 28%),
+        linear-gradient(135deg, {palette["bg0"]} 0%, {palette["bg1"]} 58%, {palette["bg2"]} 100%);
+      color: {palette["text"]};
+      font-family: {palette["body_font"]};
+    }}
+    .canvas {{
+      position: relative;
+      width: 1080px;
+      height: 1350px;
+      padding: 96px 72px 70px;
+      isolation: isolate;
+    }}
+    .editorial-aura {{
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.02) 100%),
+        radial-gradient(circle at 22% 34%, {palette["accent_glow"]}, transparent 26%),
+        radial-gradient(circle at 72% 78%, {palette["accent_glow_2"]}, transparent 24%);
+      pointer-events: none;
+      z-index: 0;
+    }}
+    .editorial-watermark {{
+      position: absolute;
+      top: 108px;
+      right: 70px;
+      font-family: {palette["display_font"]};
+      font-size: {("118px" if is_stat else "148px")};
+      line-height: 1;
+      letter-spacing: 0;
+      color: {palette["watermark"]};
+    }}
+    .editorial-topbar {{
+      position: absolute;
+      top: 96px;
+      left: 72px;
+      right: 72px;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }}
+    .editorial-section {{
+      color: {palette["muted"]};
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      font-size: 20px;
+    }}
+    .editorial-brand {{
+      display: {show_brand};
+      color: rgba(255,255,255,0.74);
+      font-style: italic;
+      font-family: {palette["display_font"]};
+      font-size: 24px;
+    }}
+    .editorial-title {{
+      position: relative;
+      z-index: 2;
+      margin: 0;
+      max-width: {title_block_max_width};
+      font-family: {palette["display_font"]};
+      font-size: {title_size};
+      line-height: {("0.95" if spec.variant == "editorial_cover" else "0.88" if spec.variant == "editorial_stat" else "1.04")};
+      letter-spacing: 0;
+      text-wrap: balance;
+    }}
+    .editorial-stage {{
+      position: absolute;
+      top: {stage_top};
+      left: 72px;
+      right: 72px;
+      bottom: {stage_bottom};
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+    }}
+    .variant-editorial-story {{
+      max-width: 610px;
+    }}
+    .variant-editorial-scenario {{
+      max-width: 560px;
+    }}
+    .variant-brief-insight,
+    .variant-brief-decision {{
+      max-width: 650px;
+      font-family: {palette["body_font"]};
+      font-weight: 850;
+    }}
+    .variant-data-stat {{
+      max-width: 560px;
+      font-family: {palette["body_font"]};
+      font-size: 34px;
+      text-transform: uppercase;
+      color: {palette["muted"]};
+    }}
+    .editorial-body {{
+      position: relative;
+      z-index: 2;
+      margin-top: {body_margin_top};
+      max-width: {body_max_width};
+      color: {palette["muted_text"]};
+      font-size: {body_font_size};
+      line-height: 1.46;
+    }}
+    .mode-data .editorial-body {{
+      font-family: {palette["body_font"]};
+      line-height: 1.38;
+    }}
+    .mode-brief .editorial-body {{
+      color: {palette["muted_text"]};
+      max-width: 610px;
+    }}
+    .editorial-accent {{
+      color: {palette["accent"]};
+      font-style: italic;
+    }}
+    .data-stat-block {{
+      display: {("flex" if is_stat else "none")};
+      flex-direction: column;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 210px;
+      margin: 24px 0 10px;
+      padding: 28px 30px;
+      border: 1px solid {palette["line"]};
+      background: {palette["stat_bg"]};
+    }}
+    .data-stat-block span {{
+      color: {palette["accent"]};
+      font-family: {palette["display_font"]};
+      font-size: {("128px" if is_data else "112px")};
+      line-height: 0.92;
+    }}
+    .data-stat-block strong {{
+      max-width: 700px;
+      color: {palette["muted_text"]};
+      font-size: 23px;
+      line-height: 1.35;
+      font-weight: 500;
+    }}
+    .editorial-rail {{
+      position: relative;
+      margin-top: auto;
+      padding-top: 34px;
+      display: {("grid" if support_html else "none")};
+      grid-template-columns: repeat({(3 if len(rail_cards) >= 3 else 2)}, minmax(0, 1fr));
+      gap: 12px;
+      z-index: 2;
+      width: 100%;
+      max-width: {("870px" if is_cover else "760px")};
+    }}
+    .editorial-rail-card {{
+      min-height: {("132px" if is_cover else "118px")};
+      padding: 18px 18px;
+      border: 1px solid {palette["line"]};
+      background: {palette["rail_bg"]};
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }}
+    .editorial-rail-card span {{
+      color: {palette["accent"]};
+      font-size: 15px;
+      line-height: 1.2;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }}
+    .editorial-rail-card strong {{
+      color: {palette["text"]};
+      font-size: 21px;
+      line-height: 1.22;
+      font-weight: 650;
+    }}
+    .editorial-tags {{
+      position: relative;
+      margin-top: {("22px" if support_html else "auto")};
+      padding-top: {("0" if support_html else "36px")};
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      z-index: 2;
+      max-width: 680px;
+    }}
+    .editorial-tag {{
+      padding: 10px 18px;
+      border-radius: {("8px" if is_data else "999px")};
+      border: 1px solid {palette["line"]};
+      background: {palette["tag_bg"]};
+      color: {palette["tag_text"]};
+      font-size: 18px;
+      letter-spacing: 0.08em;
+      text-transform: lowercase;
+    }}
+    .mode-brief .editorial-footer,
+    .mode-data .editorial-footer {{
+      font-size: 20px;
+    }}
+    .editorial-footer {{
+      position: absolute;
+      left: 72px;
+      right: 72px;
+      bottom: 60px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 2;
+      color: rgba(255,255,255,0.62);
+      font-size: 24px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }}
+    .editorial-footer .brand {{
+      opacity: 0.78;
+    }}
+    .editorial-progress {{
+      position: absolute;
+      left: 72px;
+      right: 72px;
+      bottom: 24px;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.14);
+      overflow: hidden;
+      z-index: 2;
+    }}
+    .editorial-progress-fill {{
+      width: {progress_percent}%;
+      height: 100%;
+      background: linear-gradient(90deg, rgba(255,255,255,0.95), {palette["accent"]} 58%, {palette["accent_2"]});
+    }}
+  </style>
+</head>
+<body>
+  <div class="canvas mode-{mode_class}">
+    <div class="editorial-aura"></div>
+    <div class="editorial-watermark">{html.escape(spec.watermark_number)}</div>
+    <div class="editorial-topbar">
+      <div class="editorial-section">{html.escape(spec.section_number)} · {html.escape(spec.section_label)}</div>
+      <div class="editorial-brand">{brand}</div>
+    </div>
+    <div class="editorial-stage">
+      <div class="editorial-title variant-{variant_class}">{title}</div>
+      {stat_html}
+      <div class="editorial-body">{body}</div>
+      <div class="editorial-rail">{support_html}</div>
+      <div class="editorial-tags">{tags_html}</div>
+    </div>
+    <div class="editorial-footer">
+      <div class="brand">{html.escape(logo_text.lower())}</div>
+      <div>{spec.slide_index}/{spec.total_slides}</div>
+    </div>
+    <div class="editorial-progress"><div class="editorial-progress-fill"></div></div>
+  </div>
+</body>
+</html>
+"""
+
+
+def _apply_accent_markup(text: str, accent_spans: list[str], accent_color: str) -> str:
+    rendered = text
+    for span in accent_spans[:2]:
+        safe_span = html.escape(span)
+        if safe_span and safe_span in rendered:
+            rendered = rendered.replace(
+                safe_span,
+                f'<span class="editorial-accent" style="color: {accent_color};">{safe_span}</span>',
+                1,
+            )
+    return rendered
+
+
+def _editorial_tokens(theme: str, visual_mode: str = "editorial") -> dict[str, str]:
+    palettes = {
+        "memory_archive": {
+            "bg0": "#09070f",
+            "bg1": "#171329",
+            "bg2": "#100f19",
+            "glow": "rgba(128, 118, 255, 0.22)",
+            "glow2": "rgba(93, 129, 255, 0.12)",
+            "text": "#f5f1ff",
+            "muted": "#8d85b0",
+            "muted_text": "#d6d0e6",
+            "accent": "#b89cff",
+            "accent_soft": "#cab8ff",
+            "accent_2": "#8cb6ff",
+            "accent_glow": "rgba(132, 118, 255, 0.12)",
+            "accent_glow_2": "rgba(110, 174, 255, 0.08)",
+        },
+        "growth_black": {
+            "bg0": "#09070a",
+            "bg1": "#181117",
+            "bg2": "#100d0a",
+            "glow": "rgba(255, 153, 91, 0.20)",
+            "glow2": "rgba(243, 194, 108, 0.12)",
+            "text": "#fff8f2",
+            "muted": "#b89d90",
+            "muted_text": "#e6d8cf",
+            "accent": "#ffab6f",
+            "accent_soft": "#ffc299",
+            "accent_2": "#ffd56f",
+            "accent_glow": "rgba(255, 153, 91, 0.10)",
+            "accent_glow_2": "rgba(255, 213, 111, 0.08)",
+        },
+        "research_mono": {
+            "bg0": "#090a12",
+            "bg1": "#141726",
+            "bg2": "#0d0f18",
+            "glow": "rgba(121, 150, 255, 0.18)",
+            "glow2": "rgba(86, 114, 180, 0.12)",
+            "text": "#f3f4fb",
+            "muted": "#8e94b7",
+            "muted_text": "#d7dcef",
+            "accent": "#9eafff",
+            "accent_soft": "#b9c4ff",
+            "accent_2": "#92d0ff",
+            "accent_glow": "rgba(121, 150, 255, 0.10)",
+            "accent_glow_2": "rgba(146, 208, 255, 0.07)",
+        },
+    }
+    base = palettes.get(theme, palettes["memory_archive"])
+    if visual_mode == "brief":
+        base = {
+            "bg0": "#f7f9fc",
+            "bg1": "#eaf0f7",
+            "bg2": "#f9fbfd",
+            "glow": "rgba(3, 105, 161, 0.10)",
+            "glow2": "rgba(15, 23, 42, 0.06)",
+            "text": "#101828",
+            "muted": "#475467",
+            "muted_text": "#344054",
+            "accent": "#0369a1",
+            "accent_soft": "#0f749f",
+            "accent_2": "#0f172a",
+            "accent_glow": "rgba(3, 105, 161, 0.08)",
+            "accent_glow_2": "rgba(15, 23, 42, 0.04)",
+        }
+    elif visual_mode == "data":
+        base = {
+            "bg0": "#08090d",
+            "bg1": "#10131b",
+            "bg2": "#080a10",
+            "glow": "rgba(125, 211, 252, 0.16)",
+            "glow2": "rgba(190, 242, 100, 0.10)",
+            "text": "#f8fafc",
+            "muted": "#a3adbd",
+            "muted_text": "#d7dde8",
+            "accent": "#7dd3fc",
+            "accent_soft": "#bae6fd",
+            "accent_2": "#bef264",
+            "accent_glow": "rgba(125, 211, 252, 0.08)",
+            "accent_glow_2": "rgba(190, 242, 100, 0.07)",
+        }
+    tokens = {
+        **base,
+        "display_font": ("'SFMono-Regular', 'Menlo', 'Monaco', monospace" if visual_mode == "data" else "Georgia, 'Times New Roman', serif"),
+        "body_font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    }
+    tokens["line"] = "rgba(16,24,40,0.14)" if visual_mode == "brief" else "rgba(255,255,255,0.12)"
+    tokens["rail_bg"] = "rgba(255,255,255,0.62)" if visual_mode == "brief" else "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018))"
+    tokens["tag_bg"] = "rgba(255,255,255,0.58)" if visual_mode == "brief" else "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))"
+    tokens["tag_text"] = "#344054" if visual_mode == "brief" else "rgba(255,255,255,0.78)"
+    tokens["stat_bg"] = "rgba(255,255,255,0.62)" if visual_mode == "brief" else "rgba(2,6,23,0.34)"
+    tokens["watermark"] = "rgba(16,24,40,0.05)" if visual_mode == "brief" else "rgba(255,255,255,0.06)"
+    return tokens
 
 
 def render_layout_spec_html(spec: LayoutSpec, logo_text: str = "chu ai") -> bytes:
