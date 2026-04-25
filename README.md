@@ -138,6 +138,13 @@ ADMIN_ID=
 DATA_DIR=data
 EXPORTS_DIR=data/exports
 EXPORT_PUBLIC_BASE_URL=
+INSTAGRAM_ACCESS_TOKEN=
+INSTAGRAM_USER_ID=
+INSTAGRAM_API_BASE=https://graph.instagram.com/v22.0
+INSTAGRAM_MEDIA_PROXY_BASE_URL=https://meta.chuchuchu.online
+INSTAGRAM_MEDIA_PROXY_SECRET=
+INSTAGRAM_MEDIA_PROXY_TTL_SECONDS=300
+INSTAGRAM_MEDIA_PROXY_BOT_ALIAS=KARUSEL
 META_APP_ID=
 META_APP_SECRET=
 META_REDIRECT_URI=
@@ -160,10 +167,14 @@ META_DATA_DELETION_REQUEST_URL=
 - `DATA_DIR` — папка для SQLite и логов.
 - `EXPORTS_DIR` — папка для export-пакетов.
 - `EXPORT_PUBLIC_BASE_URL` — публичный URL, по которому будут доступны export-файлы для Meta.
+- `INSTAGRAM_ACCESS_TOKEN` — long-lived Instagram access token для аккаунта публикации.
+- `INSTAGRAM_USER_ID` — Instagram API user ID аккаунта публикации.
+- `INSTAGRAM_API_BASE` — версия Instagram Graph API.
+- `INSTAGRAM_MEDIA_PROXY_*` — публичная signed-ссылка на Telegram media proxy для передачи слайдов в Instagram API.
 
 ### Meta-переменные
 
-Meta-переменные пока нужны только для будущей публикации в Instagram. Сейчас проект готовит publish plan, но не делает реальную публикацию.
+Meta-переменные нужны для подготовки publish plan и app review. Реальная публикация каруселей выполняется через `INSTAGRAM_*` переменные.
 
 - `META_APP_ID`
 - `META_APP_SECRET`

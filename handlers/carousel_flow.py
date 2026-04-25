@@ -16,6 +16,13 @@ from io import BytesIO
 from dataclasses import asdict
 from config import (
     EXPORT_PUBLIC_BASE_URL,
+    INSTAGRAM_ACCESS_TOKEN,
+    INSTAGRAM_API_BASE,
+    INSTAGRAM_MEDIA_PROXY_BASE_URL,
+    INSTAGRAM_MEDIA_PROXY_BOT_ALIAS,
+    INSTAGRAM_MEDIA_PROXY_SECRET,
+    INSTAGRAM_MEDIA_PROXY_TTL_SECONDS,
+    INSTAGRAM_USER_ID,
     THREADS_ACCESS_TOKEN,
     THREADS_API_BASE,
     THREADS_MEDIA_PROXY_BASE_URL,
@@ -56,6 +63,7 @@ from services.layout_engine import (
     resolve_visual_mode,
 )
 from services.html_renderer import browser_binaries_hint, render_layout_spec_html
+from services.instagram_publisher import InstagramPublisher
 from services.meta_publish import MetaCredentials, build_carousel_publish_plan, load_export_package
 from services.threads_publish import build_threads_publish_plan, serialize_threads_publish_plan
 from services.threads_publisher import ThreadsPublisher
@@ -372,6 +380,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="🛰 Prepare Meta Publish", callback_data=f"meta_prepare:{export_id}"),
+                InlineKeyboardButton(text="📸 Publish to Instagram", callback_data=f"instagram_publish:{export_id}"),
                 InlineKeyboardButton(text="🧵 Publish to Threads", callback_data=f"threads_publish:{export_id}"),
             ]
         ]
@@ -461,6 +470,67 @@ async def meta_prepare_publish(callback: types.CallbackQuery):
         f"Public base: {public_info.public_base_url}\n"
         f"First slide URL: {public_info.slide_urls[0]}\n\n"
         "Следующий шаг: подключить Meta account и подставить реальные `IG_USER_ID` + `ACCESS_TOKEN`."
+    )
+
+
+@router.callback_query(F.data.startswith("instagram_publish:"))
+async def instagram_publish(callback: types.CallbackQuery):
+    await callback.answer()
+    export_id = callback.data.split(":", 1)[1]
+    export_record = get_export_package(export_id)
+    if not export_record:
+        await callback.message.answer("⚠️ Export package не найден. Сгенерируйте карусель заново.")
+        return
+
+    if not INSTAGRAM_ACCESS_TOKEN or not INSTAGRAM_USER_ID:
+        await callback.message.answer(
+            "⚠️ Instagram publisher не настроен.\n\n"
+            "Нужно задать `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID`, "
+            "`INSTAGRAM_API_BASE` и media proxy переменные."
+        )
+        return
+
+    publisher = InstagramPublisher(
+        access_token=INSTAGRAM_ACCESS_TOKEN,
+        user_id=INSTAGRAM_USER_ID,
+        bot=callback.bot,
+        api_base=INSTAGRAM_API_BASE,
+        media_proxy_base_url=INSTAGRAM_MEDIA_PROXY_BASE_URL,
+        media_proxy_bot_alias=INSTAGRAM_MEDIA_PROXY_BOT_ALIAS,
+        media_proxy_secret=INSTAGRAM_MEDIA_PROXY_SECRET,
+        media_proxy_ttl_seconds=INSTAGRAM_MEDIA_PROXY_TTL_SECONDS,
+    )
+
+    await callback.message.answer("📸 Публикую карусель в Instagram...")
+    result = await publisher.publish_export(export_dir=export_record["export_dir"])
+
+    if result.success:
+        job_id = create_meta_publish_job(
+            export_id=export_id,
+            status="published_to_instagram",
+            plan_json=json.dumps(
+                {
+                    "ig_user_id": INSTAGRAM_USER_ID,
+                    "creation_id": result.creation_id,
+                    "published_id": result.published_id,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+        await callback.message.answer(
+            "✅ Карусель опубликована в Instagram.\n\n"
+            f"Export ID: {export_id}\n"
+            f"Job ID: {job_id}\n"
+            f"Container ID: {result.creation_id}\n"
+            f"Instagram ID: {result.published_id}"
+        )
+        return
+
+    await callback.message.answer(
+        "❌ Не удалось опубликовать карусель в Instagram.\n\n"
+        f"Export ID: {export_id}\n"
+        f"Ошибка: {result.error_message}"
     )
 
 
