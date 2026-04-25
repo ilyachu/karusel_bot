@@ -23,30 +23,35 @@ INSTA_REWRITE_LABELS = {
 INSTA_VISUAL_PRESETS = {
     "auto": {
         "label": "Авто",
+        "button": "Авто",
         "theme": "auto",
         "visual_mode": "auto",
         "description": "сам подберу визуал по тексту",
     },
     "calm": {
         "label": "Спокойный редакционный",
+        "button": "Спокойный",
         "theme": "memory_archive",
         "visual_mode": "editorial",
         "description": "чистая подача, заметки, разбор",
     },
     "business": {
         "label": "Деловой мемо",
+        "button": "Деловой",
         "theme": "founder_brief",
         "visual_mode": "brief",
         "description": "как краткий документ для фаундера",
     },
     "facts": {
         "label": "Цифры и факты",
+        "button": "Цифры",
         "theme": "research_mono",
         "visual_mode": "data",
         "description": "для новостей, сравнений и аналитики",
     },
     "contrast": {
         "label": "Контрастный рост",
+        "button": "Контраст",
         "theme": "growth_black",
         "visual_mode": "data",
         "description": "ярче, для маркетинга и роста",
@@ -60,6 +65,16 @@ INSTA_CARD_FORMAT_LABELS = {
     "data": "Факты",
     "classic": "Классика",
 }
+
+INSTA_CARD_FORMAT_DESCRIPTIONS = {
+    "auto": "бот сам выберет сетку",
+    "editorial": "крупные заголовки, журнальная подача",
+    "brief": "строго, как деловой документ",
+    "data": "акцент на цифры и короткие факты",
+    "classic": "универсальная чистая верстка",
+}
+
+INSTA_CARD_SIZE_LABEL = "1080×1350, вертикаль 4:5"
 
 
 def build_insta_theme_keyboard(selected: str = "auto") -> InlineKeyboardMarkup:
@@ -95,15 +110,17 @@ def _insta_setup_summary(data: dict) -> str:
     visual = INSTA_VISUAL_PRESETS.get(visual_key, INSTA_VISUAL_PRESETS["auto"])
     visual_title = "Своя картинка" if custom_bg else visual["label"]
     visual_description = "загруженный фон для всех карточек" if custom_bg else visual["description"]
+    format_title = INSTA_CARD_FORMAT_LABELS.get(card_format, "Авто")
+    format_description = INSTA_CARD_FORMAT_DESCRIPTIONS.get(card_format, "бот сам выберет сетку")
 
     return (
         "🚀 Insta Auto\n\n"
-        "Настройте карусель на одном экране и отправьте текст, голосовое или пересланный пост.\n\n"
-        f"1. Подача текста: {INSTA_REWRITE_LABELS.get(rewrite_style, 'Коротко и ясно')}\n"
-        f"2. Визуал: {visual_title} — {visual_description}\n"
-        f"3. Формат карточек: {INSTA_CARD_FORMAT_LABELS.get(card_format, 'Авто')}\n\n"
-        "После этого просто пришлите материал. Я сначала перепишу его под выбранную подачу, "
-        "затем соберу карточки и подпись."
+        "Сначала выберите 4 понятных блока ниже, потом пришлите текст, голосовое или пересланный пост.\n\n"
+        f"✍️ Текст: {INSTA_REWRITE_LABELS.get(rewrite_style, 'Коротко и ясно')}\n"
+        f"🎨 Дизайн и цвет: {visual_title} — {visual_description}\n"
+        f"🔠 Типографика и сетка: {format_title} — {format_description}\n"
+        f"📐 Размер: {INSTA_CARD_SIZE_LABEL}\n\n"
+        "После настроек просто отправьте материал."
     )
 
 
@@ -114,7 +131,11 @@ def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarku
     card_format = data.get("insta_card_format", "auto")
     custom_bg = data.get("insta_custom_bg_bytes")
 
+    def section(title: str) -> list[InlineKeyboardButton]:
+        return [InlineKeyboardButton(text=title, callback_data="insta_noop")]
+
     rewrite_rows = []
+    rewrite_rows.append(section("✍️ ТЕКСТ: как переписываем"))
     for key in ("concise", "educational", "marketing", "exact"):
         label = INSTA_REWRITE_LABELS[key]
         if key == rewrite_style:
@@ -122,29 +143,36 @@ def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarku
         rewrite_rows.append([InlineKeyboardButton(text=label, callback_data=f"insta_copy:{key}")])
 
     visual_rows = []
+    visual_rows.append(section("🎨 ДИЗАЙН И ЦВЕТ: настроение карточек"))
     visual_buttons = []
     for key in ("auto", "calm", "business", "facts", "contrast"):
-        label = INSTA_VISUAL_PRESETS[key]["label"]
+        label = INSTA_VISUAL_PRESETS[key].get("button", INSTA_VISUAL_PRESETS[key]["label"])
         if key == visual_key and not custom_bg:
             label = f"✅ {label}"
         visual_buttons.append(InlineKeyboardButton(text=label, callback_data=f"insta_pack:{key}"))
     visual_rows.extend([visual_buttons[:2], visual_buttons[2:4], visual_buttons[4:]])
-    custom_label = "✅ Своя картинка загружена" if custom_bg else "📎 Загрузить свой фон"
-    visual_rows.append([InlineKeyboardButton(text=custom_label, callback_data="insta_upload_bg")])
 
     format_buttons = []
+    format_rows = [section("🔠 ТИПОГРАФИКА И СЕТКА: как выглядит карточка")]
     for key in ("auto", "editorial", "brief", "data", "classic"):
         label = INSTA_CARD_FORMAT_LABELS[key]
         if key == card_format:
             label = f"✅ {label}"
         format_buttons.append(InlineKeyboardButton(text=label, callback_data=f"insta_format:{key}"))
+    format_rows.extend([format_buttons[:3], format_buttons[3:]])
+
+    custom_label = "✅ Свой фон загружен" if custom_bg else "📎 Загрузить свой фон"
+    size_rows = [
+        section(f"📐 РАЗМЕР: {INSTA_CARD_SIZE_LABEL}"),
+        [InlineKeyboardButton(text=custom_label, callback_data="insta_upload_bg")],
+    ]
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             *rewrite_rows,
             *visual_rows,
-            format_buttons[:3],
-            format_buttons[3:],
+            *format_rows,
+            *size_rows,
             [InlineKeyboardButton(text="Сбросить настройки", callback_data="insta_reset_setup")],
         ]
     )
@@ -233,6 +261,14 @@ async def insta_visual_selected(callback: types.CallbackQuery, state: FSMContext
     card_format = visual_mode if visual_mode in INSTA_CARD_FORMAT_LABELS else "auto"
     await state.update_data(insta_visual_mode=visual_mode, insta_card_format=card_format)
     await show_insta_auto_setup(callback.message, state, edit=True)
+
+
+@router.callback_query(
+    StateFilter(CarouselFlow.insta_auto_waiting_for_text, CarouselFlow.insta_auto_waiting_for_background),
+    F.data == "insta_noop",
+)
+async def insta_noop(callback: types.CallbackQuery):
+    await callback.answer()
 
 
 @router.callback_query(
