@@ -5,6 +5,7 @@ load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_FALLBACK_MODEL = os.getenv("OPENAI_FALLBACK_MODEL", "gpt-4.1-mini")
 NEURALDEEP_API_KEY = os.getenv("NEURALDEEP_API_KEY")
 NEURALDEEP_BASE_URL = os.getenv("NEURALDEEP_BASE_URL", "https://api.neuraldeep.ru/v1")
 NEURALDEEP_MODEL = os.getenv("NEURALDEEP_MODEL", "gemma-4-31b")

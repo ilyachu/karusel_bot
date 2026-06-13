@@ -12,13 +12,20 @@ from config import (
     NEURALDEEP_BASE_URL,
     NEURALDEEP_MODEL,
     OPENAI_API_KEY,
+    OPENAI_FALLBACK_MODEL,
 )
 
-llm_client = AsyncOpenAI(
-    api_key=NEURALDEEP_API_KEY or OPENAI_API_KEY,
-    base_url=NEURALDEEP_BASE_URL,
-)
-DEFAULT_MODEL = NEURALDEEP_MODEL
+if NEURALDEEP_API_KEY:
+    llm_client = AsyncOpenAI(
+        api_key=NEURALDEEP_API_KEY,
+        base_url=NEURALDEEP_BASE_URL,
+    )
+    DEFAULT_MODEL = NEURALDEEP_MODEL
+else:
+    llm_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    DEFAULT_MODEL = OPENAI_FALLBACK_MODEL
+
+openai_fallback_client = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 LAYOUT_STYLE_PROMPTS = {
     "magazine": "magazine: аналитика, эссе, разборы. Playfair Display или DM Serif Display, воздух, editorial rhythm, спокойная и умная композиция.",
@@ -361,8 +368,11 @@ async def _router_text_request(prompt: str) -> str:
 
 
 async def _openai_json_request(prompt: str) -> dict:
-    response = await llm_client.chat.completions.create(
-        model=DEFAULT_MODEL,
+    if not openai_fallback_client:
+        raise RuntimeError("OPENAI_API_KEY is not configured for fallback requests.")
+
+    response = await openai_fallback_client.chat.completions.create(
+        model=OPENAI_FALLBACK_MODEL,
         messages=[
             {"role": "system", "content": "Return valid JSON only. No markdown fences, no explanation."},
             {"role": "user", "content": prompt},
@@ -375,8 +385,11 @@ async def _openai_json_request(prompt: str) -> dict:
 
 
 async def _openai_text_request(prompt: str) -> str:
-    response = await llm_client.chat.completions.create(
-        model=DEFAULT_MODEL,
+    if not openai_fallback_client:
+        raise RuntimeError("OPENAI_API_KEY is not configured for fallback requests.")
+
+    response = await openai_fallback_client.chat.completions.create(
+        model=OPENAI_FALLBACK_MODEL,
         messages=[
             {"role": "system", "content": "Write concise Russian editorial/social copy without marketing fluff."},
             {"role": "user", "content": prompt},
