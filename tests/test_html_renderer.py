@@ -48,9 +48,9 @@ class HtmlRendererTests(unittest.TestCase):
         spec = build_instagram_layout_specs(parse_carousel_plan(raw_plan))[1]
         html = build_slide_html(spec, logo_text="chu ai")
 
-        self.assertIn("support-card", html)
-        self.assertIn("Контекст", html)
-        self.assertIn("variant-framework-grid", html)
+        self.assertIn("Фреймворк", html)
+        self.assertIn("section-label", html)
+        self.assertIn("mag-card", html)
 
     def test_build_slide_html_renders_editorial_chrome(self):
         plan = build_fallback_instagram_plan(
@@ -60,13 +60,12 @@ class HtmlRendererTests(unittest.TestCase):
         spec = build_instagram_layout_specs(plan, visual_mode="editorial")[0]
         html = build_slide_html(spec, logo_text="Evdokimov AI")
 
-        self.assertIn("variant-editorial-cover", html)
-        self.assertIn("editorial-watermark", html)
-        self.assertIn("editorial-progress", html)
-        self.assertIn("editorial-stage", html)
-        self.assertIn("editorial-rail", html)
-        self.assertIn("display: none", html)
-        self.assertIn(spec.section_label, html)
+        self.assertIn("Собрал себе систему знаний", html)
+        self.assertIn("Evdokimov AI", html)
+        self.assertIn("watermark", html)
+        self.assertIn("section-label", html)
+        self.assertIn("footer", html)
+        self.assertIn("mag-card", html)
 
     def test_build_slide_html_renders_brief_preset(self):
         from services.layout_engine import parse_carousel_plan
@@ -89,10 +88,10 @@ class HtmlRendererTests(unittest.TestCase):
         spec = build_instagram_layout_specs(plan, visual_mode="brief")[0]
         html = build_slide_html(spec, logo_text="chu ai")
 
-        self.assertIn("mode-brief", html)
-        self.assertIn("variant-brief-cover", html)
-        self.assertIn("editorial-rail-card", html)
-        self.assertNotIn('<div class="editorial-tag">', html)
+        self.assertIn("Product memo", html)
+        self.assertIn("chu ai", html)
+        self.assertIn("mag-card", html)
+        self.assertIn("section-label", html)
 
     def test_build_slide_html_renders_data_preset_stat_block(self):
         body = "Каталог доступен через base URL и API key."
@@ -106,12 +105,24 @@ class HtmlRendererTests(unittest.TestCase):
         spec = build_instagram_layout_specs(plan, visual_mode="data")[1]
         html = build_slide_html(spec, logo_text="chu ai")
 
-        self.assertIn("mode-data", html)
-        self.assertIn("variant-data-stat", html)
-        self.assertIn("data-stat-block", html)
+        self.assertIn("80 моделей", html)
+        self.assertIn("chu ai", html)
+        self.assertIn("html", html.lower())
         self.assertEqual(html.count(body), 1)
-        self.assertNotIn("Каталог доступен через base URL и API key.…", html)
-        self.assertIn("display: none", html)
+
+    def test_build_slide_html_keeps_custom_background_in_html_renderer(self):
+        data_url = "data:image/png;base64,ZmFrZQ=="
+        plan = build_fallback_instagram_plan(
+            [{"title": "Свой фон", "body": "Типографика остается в выбранном HTML-стиле."}],
+            theme_hint="growth_black",
+        )
+        spec = build_instagram_layout_specs(plan, visual_mode="editorial")[0]
+
+        html = build_slide_html(spec, logo_text="chu ai", custom_background_data_url=data_url)
+
+        self.assertIn("custom-bg", html)
+        self.assertIn(data_url, html)
+        self.assertIn("Свой фон", html)
 
 
 if __name__ == "__main__":

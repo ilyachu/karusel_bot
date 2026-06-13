@@ -193,6 +193,45 @@ class CarouselPlan:
     theme_hint: str
     cta: str
     slides: list[SlidePlanEntry]
+    layout_style: str = "magazine"
+
+
+LAYOUT_STYLE_LABELS = {
+    "magazine": "📰 Журнал",
+    "terminal": "💻 Терминал",
+    "poster": "🎯 Плакат",
+    "carddeck": "📇 Карточки",
+}
+
+LAYOUT_STYLE_DESCRIPTIONS = {
+    "magazine": "Серьёзный журнальный стиль с засечками. Для разборов, аналитики, эссе.",
+    "terminal": "Хакерский моноширинный стиль. Для технических обзоров, бенчмарков, AI-новостей.",
+    "poster": "Яркий плакатный стиль. Для манифестов, анонсов, сильных утверждений.",
+    "carddeck": "Чистый карточный стиль. Для списков, чеклистов, образовательного контента.",
+}
+
+LAYOUT_STYLE_FONTS = {
+    "magazine": {
+        "heading": "'Playfair Display', Georgia, 'Times New Roman', serif",
+        "body": "'Inter', system-ui, -apple-system, sans-serif",
+        "google": "Playfair+Display:wght@400;700;900|Inter:wght@400;500;600;700",
+    },
+    "terminal": {
+        "heading": "'JetBrains Mono', 'SFMono-Regular', 'Menlo', monospace",
+        "body": "'JetBrains Mono', 'SFMono-Regular', 'Menlo', monospace",
+        "google": "JetBrains+Mono:wght@400;500;700;800",
+    },
+    "poster": {
+        "heading": "'Unbounded', 'Arial Black', sans-serif",
+        "body": "'Inter', system-ui, -apple-system, sans-serif",
+        "google": "Unbounded:wght@400;700;900|Inter:wght@400;500;600;700",
+    },
+    "carddeck": {
+        "heading": "'Inter', system-ui, -apple-system, sans-serif",
+        "body": "'Inter', system-ui, -apple-system, sans-serif",
+        "google": "Inter:wght@400;500;600;700;800",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -211,6 +250,7 @@ class LayoutSpec:
     highlight_words: list[str]
     density: str
     show_progress: bool
+    layout_style: str = "magazine"
     section_label: str = ""
     section_number: str = ""
     watermark_number: str = ""
@@ -245,15 +285,17 @@ class VisualModeDecision:
         return asdict(self)
 
 
-def build_instagram_layout_specs(plan: CarouselPlan, visual_mode: str = "classic") -> list[LayoutSpec]:
+def build_instagram_layout_specs(plan: CarouselPlan, visual_mode: str = "classic", layout_style: str = "magazine") -> list[LayoutSpec]:
+    if layout_style not in LAYOUT_STYLE_LABELS:
+        layout_style = "magazine"
     decision = resolve_visual_mode(plan, visual_mode)
     if decision.resolved_mode == "editorial":
-        return _build_editorial_layout_specs(plan)
+        return _build_editorial_layout_specs(plan, layout_style=layout_style)
     if decision.resolved_mode == "brief":
-        return _build_brief_layout_specs(plan)
+        return _build_brief_layout_specs(plan, layout_style=layout_style)
     if decision.resolved_mode == "data":
-        return _build_data_layout_specs(plan)
-    return _build_classic_layout_specs(plan)
+        return _build_data_layout_specs(plan, layout_style=layout_style)
+    return _build_classic_layout_specs(plan, layout_style=layout_style)
 
 
 def resolve_preset_visual_profile(preset_key: str) -> dict[str, str]:
@@ -311,7 +353,7 @@ def resolve_visual_mode(plan: CarouselPlan, visual_mode: str = "classic") -> Vis
     )
 
 
-def _build_classic_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
+def _build_classic_layout_specs(plan: CarouselPlan, layout_style: str = "magazine") -> list[LayoutSpec]:
     theme = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "business_dark"
     theme_system = THEME_SYSTEMS[theme]
     total_slides = len(plan.slides)
@@ -338,13 +380,14 @@ def _build_classic_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
                 highlight_words=slide.emphasis,
                 density=slide.density,
                 show_progress=total_slides > 1,
+                layout_style=layout_style,
                 supporting_cards=supporting_cards,
             )
         )
     return specs
 
 
-def _build_editorial_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
+def _build_editorial_layout_specs(plan: CarouselPlan, layout_style: str = "magazine") -> list[LayoutSpec]:
     theme = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "business_dark"
     theme_system = THEME_SYSTEMS[theme]
     total_slides = len(plan.slides)
@@ -368,6 +411,7 @@ def _build_editorial_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
                 highlight_words=slide.emphasis,
                 density=slide.density,
                 show_progress=total_slides > 1,
+                layout_style=layout_style,
                 section_label=_editorial_section_label(slide, variant),
                 section_number=f"{slide.index:02d}",
                 watermark_number=f"{slide.index:02d}",
@@ -381,7 +425,7 @@ def _build_editorial_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
     return specs
 
 
-def _build_brief_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
+def _build_brief_layout_specs(plan: CarouselPlan, layout_style: str = "magazine") -> list[LayoutSpec]:
     theme = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "founder_brief"
     theme_system = THEME_SYSTEMS[theme]
     total_slides = len(plan.slides)
@@ -405,6 +449,7 @@ def _build_brief_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
                 highlight_words=slide.emphasis,
                 density=slide.density,
                 show_progress=total_slides > 1,
+                layout_style=layout_style,
                 section_label=_brief_section_label(slide, variant),
                 section_number=f"{slide.index:02d}",
                 watermark_number=f"{slide.index:02d}",
@@ -417,7 +462,7 @@ def _build_brief_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
     return specs
 
 
-def _build_data_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
+def _build_data_layout_specs(plan: CarouselPlan, layout_style: str = "magazine") -> list[LayoutSpec]:
     theme = plan.theme_hint if plan.theme_hint in THEME_SYSTEMS else "research_mono"
     theme_system = THEME_SYSTEMS[theme]
     total_slides = len(plan.slides)
@@ -443,6 +488,7 @@ def _build_data_layout_specs(plan: CarouselPlan) -> list[LayoutSpec]:
                 highlight_words=slide.emphasis,
                 density=slide.density,
                 show_progress=total_slides > 1,
+                layout_style=layout_style,
                 section_label=_data_section_label(slide, variant),
                 section_number=f"{slide.index:02d}",
                 watermark_number=stat or f"{slide.index:02d}",
@@ -556,6 +602,7 @@ def parse_carousel_plan(raw_plan: dict) -> CarouselPlan:
         tone=str(carousel.get("tone", "clear_confident")),
         theme_hint=str(carousel.get("theme_hint", "business_dark")),
         cta=str(carousel.get("cta", "save_and_follow")),
+        layout_style=str(carousel.get("layout_style", "magazine")),
         slides=slides,
     )
 

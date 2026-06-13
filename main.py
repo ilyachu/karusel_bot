@@ -37,8 +37,8 @@ async def error_handler(event: ErrorEvent):
             await update.message.answer("😔 Произошла ошибка. Попробуйте снова или используйте /start")
         elif update and update.callback_query:
             await update.callback_query.message.answer("😔 Произошла ошибка. Попробуйте снова или используйте /start")
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"Failed to send error response to user: {e}")
     
     return True
 

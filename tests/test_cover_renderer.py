@@ -63,10 +63,55 @@ class CoverRendererTests(unittest.TestCase):
         html = build_cover_html(plan)
 
         self.assertIn("film-frame", html)
-        self.assertIn("Retro Film Burn", COVER_STYLES["retro_polaroid"]["label"])
+        self.assertIn("Плёночный архив", COVER_STYLES["retro_polaroid"]["label"])
         self.assertIn("linear-gradient(128deg", html)
         self.assertIn("FILM · 01", html)
         self.assertIn("ISO 400", html)
+
+    def test_cover_style_labels_are_clear_russian_names(self):
+        expected_labels = {
+            "orange_poster": "Оранжевый постер",
+            "acid_poster": "Кислотный постер",
+            "red_manifesto": "Красный манифест",
+            "paper_brief": "Бумажный разбор",
+            "retro_polaroid": "Плёночный архив",
+            "blue_type": "Синяя типографика",
+            "grid_steps": "Сетка и шаги",
+            "blur_field": "Размытое движение",
+            "quiet_editorial": "Тихий журнал",
+            "chalk_notes": "Ручные заметки",
+        }
+
+        self.assertEqual(
+            {style: tokens["label"] for style, tokens in COVER_STYLES.items()},
+            expected_labels,
+        )
+
+    def test_new_cover_styles_have_distinct_layout_css(self):
+        style_markers = {
+            "red_manifesto": ("cover-red-manifesto", "Impact"),
+            "paper_brief": ("cover-paper-brief", "box-shadow"),
+            "quiet_editorial": ("cover-quiet-editorial", "Georgia"),
+            "chalk_notes": ("cover-chalk-notes", "Comic Sans MS"),
+        }
+
+        for style, markers in style_markers.items():
+            with self.subTest(style=style):
+                plan = CoverPlan(
+                    headline="не жди идеального момента",
+                    subtitle="он уже сейчас",
+                    eyebrow_left="РАЗБОР · № 01",
+                    eyebrow_right="28/04",
+                    footer_left="ДЛЯ ЧИТАТЕЛЕЙ",
+                    symbol="slash",
+                    style=style,
+                    format_key="post",
+                )
+
+                html = build_cover_html(plan)
+
+                for marker in markers:
+                    self.assertIn(marker, html)
 
     def test_poster_headline_does_not_allow_mid_word_breaks(self):
         plan = CoverPlan(

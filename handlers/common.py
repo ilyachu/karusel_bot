@@ -1,11 +1,15 @@
+import asyncio
+import logging
+
 from aiogram import Router, types, F
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from utils.database import get_user_logo, set_user_logo, reset_user_logo
 from utils.states import CarouselFlow
-from services.layout_engine import THEME_LABELS, VISUAL_MODE_LABELS
+from utils.validation import validate_text_length
+from services.layout_engine import LAYOUT_STYLE_LABELS, THEME_LABELS, VISUAL_MODE_LABELS
 from config import ADMIN_ID
 
 class Settings(StatesGroup):
@@ -29,49 +33,49 @@ INSTA_VISUAL_PRESETS = {
         "description": "сам подберу визуал по тексту",
     },
     "calm": {
-        "label": "Спокойный редакционный",
+        "label": "Спокойный",
         "button": "Спокойный",
         "theme": "memory_archive",
         "visual_mode": "editorial",
-        "description": "чистая подача, заметки, разбор",
+        "description": "спокойные цвета, понятный шрифт, чистый разбор",
     },
     "business": {
-        "label": "Деловой мемо",
-        "button": "Деловой",
+        "label": "Мемо",
+        "button": "Мемо",
         "theme": "founder_brief",
         "visual_mode": "brief",
-        "description": "как краткий документ для фаундера",
+        "description": "строго, как продуктовая заметка или решение",
     },
     "facts": {
-        "label": "Цифры и факты",
+        "label": "Факты",
         "button": "Цифры",
         "theme": "research_mono",
         "visual_mode": "data",
-        "description": "для новостей, сравнений и аналитики",
+        "description": "для цифр, сравнений, новостей и аналитики",
     },
     "contrast": {
-        "label": "Контрастный рост",
+        "label": "Контрастный",
         "button": "Контраст",
         "theme": "growth_black",
-        "visual_mode": "data",
-        "description": "ярче, для маркетинга и роста",
+        "visual_mode": "editorial",
+        "description": "как обложки: темнее, крупнее, заметнее",
     },
 }
 
 INSTA_CARD_FORMAT_LABELS = {
     "auto": "Авто",
-    "editorial": "Журнал",
+    "editorial": "Крупный",
     "brief": "Мемо",
     "data": "Факты",
-    "classic": "Классика",
+    "classic": "Читабельно",
 }
 
 INSTA_CARD_FORMAT_DESCRIPTIONS = {
     "auto": "бот сам выберет сетку",
-    "editorial": "крупные заголовки, журнальная подача",
+    "editorial": "крупный дизайнерский заголовок",
     "brief": "строго, как деловой документ",
     "data": "акцент на цифры и короткие факты",
-    "classic": "универсальная чистая верстка",
+    "classic": "понятный шрифт и спокойная верстка",
 }
 
 INSTA_CARD_SIZE_LABEL = "1080×1350, вертикаль 4:5"
@@ -102,78 +106,58 @@ def build_insta_auto_keyboard(selected_theme: str = "auto", selected_visual_mode
 
 
 def _insta_setup_summary(data: dict) -> str:
-    rewrite_style = data.get("insta_rewrite_style", "concise")
     visual_key = data.get("insta_visual_preset", "auto")
-    card_format = data.get("insta_card_format", "auto")
     custom_bg = data.get("insta_custom_bg_bytes")
 
     visual = INSTA_VISUAL_PRESETS.get(visual_key, INSTA_VISUAL_PRESETS["auto"])
     visual_title = "Своя картинка" if custom_bg else visual["label"]
-    visual_description = "загруженный фон для всех карточек" if custom_bg else visual["description"]
-    format_title = INSTA_CARD_FORMAT_LABELS.get(card_format, "Авто")
-    format_description = INSTA_CARD_FORMAT_DESCRIPTIONS.get(card_format, "бот сам выберет сетку")
+    visual_desc = "загруженный фон для всех слайдов" if custom_bg else visual["description"]
+
+    presets_list = "\n".join(
+        f"• {p['label']} — {p['description']}"
+        for p in INSTA_VISUAL_PRESETS.values()
+    )
 
     return (
         "🚀 Insta Auto\n\n"
-        "Сначала выберите 4 понятных блока ниже, потом пришлите текст, голосовое или пересланный пост.\n\n"
-        f"✍️ Текст: {INSTA_REWRITE_LABELS.get(rewrite_style, 'Коротко и ясно')}\n"
-        f"🎨 Дизайн и цвет: {visual_title} — {visual_description}\n"
-        f"🔠 Типографика и сетка: {format_title} — {format_description}\n"
-        f"📐 Размер: {INSTA_CARD_SIZE_LABEL}\n\n"
-        "После настроек просто отправьте материал."
+        "Выберите пресет, потом отправьте текст.\n\n"
+        f"🎨 Текущий: {visual_title}\n"
+        f"   {visual_desc}\n\n"
+        f"Доступные пресеты:\n{presets_list}\n\n"
+        f"📐 Формат: 1080×1350 (4:5)\n"
+        "📎 Или загрузите свой фон"
     )
 
 
 def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarkup:
     data = data or {}
-    rewrite_style = data.get("insta_rewrite_style", "concise")
     visual_key = data.get("insta_visual_preset", "auto")
-    card_format = data.get("insta_card_format", "auto")
     custom_bg = data.get("insta_custom_bg_bytes")
 
     def section(title: str) -> list[InlineKeyboardButton]:
         return [InlineKeyboardButton(text=title, callback_data="insta_noop")]
 
-    rewrite_rows = []
-    rewrite_rows.append(section("✍️ ТЕКСТ: как переписываем"))
-    for key in ("concise", "educational", "marketing", "exact"):
-        label = INSTA_REWRITE_LABELS[key]
-        if key == rewrite_style:
-            label = f"✅ {label}"
-        rewrite_rows.append([InlineKeyboardButton(text=label, callback_data=f"insta_copy:{key}")])
-
     visual_rows = []
-    visual_rows.append(section("🎨 ДИЗАЙН И ЦВЕТ: настроение карточек"))
+    visual_rows.append(section("🎨 ПРЕСЕТ"))
     visual_buttons = []
     for key in ("auto", "calm", "business", "facts", "contrast"):
         label = INSTA_VISUAL_PRESETS[key].get("button", INSTA_VISUAL_PRESETS[key]["label"])
         if key == visual_key and not custom_bg:
             label = f"✅ {label}"
         visual_buttons.append(InlineKeyboardButton(text=label, callback_data=f"insta_pack:{key}"))
-    visual_rows.extend([visual_buttons[:2], visual_buttons[2:4], visual_buttons[4:]])
+    visual_rows.extend([visual_buttons[:3], visual_buttons[3:]])
 
-    format_buttons = []
-    format_rows = [section("🔠 ТИПОГРАФИКА И СЕТКА: как выглядит карточка")]
-    for key in ("auto", "editorial", "brief", "data", "classic"):
-        label = INSTA_CARD_FORMAT_LABELS[key]
-        if key == card_format:
-            label = f"✅ {label}"
-        format_buttons.append(InlineKeyboardButton(text=label, callback_data=f"insta_format:{key}"))
-    format_rows.extend([format_buttons[:3], format_buttons[3:]])
-
-    custom_label = "✅ Свой фон загружен" if custom_bg else "📎 Загрузить свой фон"
-    size_rows = [
-        section(f"📐 РАЗМЕР: {INSTA_CARD_SIZE_LABEL}"),
+    custom_label = "✅ Свой фон" if custom_bg else "📎 Свой фон"
+    action_rows = [
         [InlineKeyboardButton(text=custom_label, callback_data="insta_upload_bg")],
+        [InlineKeyboardButton(text="🖼 Обложка в этом стиле", callback_data="insta_make_cover")],
     ]
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            *rewrite_rows,
             *visual_rows,
-            *format_rows,
-            *size_rows,
-            [InlineKeyboardButton(text="Сбросить настройки", callback_data="insta_reset_setup")],
+            *action_rows,
+            [InlineKeyboardButton(text="🔄 Сбросить", callback_data="insta_reset_setup")],
         ]
     )
 
@@ -186,6 +170,27 @@ async def show_insta_auto_setup(message: types.Message, state: FSMContext, *, ed
         await message.edit_text(text, reply_markup=keyboard)
     else:
         await message.answer(text, reply_markup=keyboard)
+
+
+async def start_insta_creation_setup(
+    message: types.Message,
+    state: FSMContext,
+    *,
+    intro: str | None = None,
+):
+    await state.clear()
+    await state.update_data(
+        insta_rewrite_style="concise",
+        insta_visual_preset="auto",
+        insta_theme_override="auto",
+        insta_visual_mode="auto",
+        insta_card_format="auto",
+        insta_layout_style="auto",
+    )
+    await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
+    if intro:
+        await message.answer(intro)
+    await show_insta_auto_setup(message, state)
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -211,21 +216,18 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 @router.message(F.text == "Создать карусель")
 async def cmd_create_carousel(message: types.Message, state: FSMContext):
-    await state.clear()
-    await message.answer("📝 Отправьте мне текст, голосовое сообщение или перешлите пост для создания карусели.")
+    await start_insta_creation_setup(
+        message,
+        state,
+        intro=(
+            "📝 Создать карусель\n\n"
+            "Теперь этот режим использует тот же Instagram-ready pipeline: текст, дизайн, caption, export и публикация."
+        ),
+    )
 
 @router.message(F.text == "🚀 Insta Auto")
 async def cmd_insta_auto(message: types.Message, state: FSMContext):
-    await state.clear()
-    await state.update_data(
-        insta_rewrite_style="concise",
-        insta_visual_preset="auto",
-        insta_theme_override="auto",
-        insta_visual_mode="auto",
-        insta_card_format="auto",
-    )
-    await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
-    await show_insta_auto_setup(message, state)
+    await start_insta_creation_setup(message, state)
 
 
 @router.callback_query(CarouselFlow.insta_auto_waiting_for_text, F.data.startswith("insta_theme:"))
@@ -247,6 +249,7 @@ async def insta_theme_selected(callback: types.CallbackQuery, state: FSMContext)
         insta_visual_preset=preset_key,
         insta_theme_override=preset["theme"],
         insta_visual_mode=preset["visual_mode"],
+        insta_card_format=preset["visual_mode"],
         insta_custom_bg_bytes=None,
     )
     await show_insta_auto_setup(callback.message, state, edit=True)
@@ -299,6 +302,7 @@ async def insta_pack_selected(callback: types.CallbackQuery, state: FSMContext):
         insta_visual_preset=preset_key,
         insta_theme_override=preset["theme"],
         insta_visual_mode=preset["visual_mode"],
+        insta_card_format=preset["visual_mode"],
         insta_custom_bg_bytes=None,
     )
     await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
@@ -322,6 +326,20 @@ async def insta_format_selected(callback: types.CallbackQuery, state: FSMContext
         preset = INSTA_VISUAL_PRESETS.get(data.get("insta_visual_preset", "auto"), INSTA_VISUAL_PRESETS["auto"])
         updates["insta_visual_mode"] = preset["visual_mode"]
     await state.update_data(**updates)
+    await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
+    await show_insta_auto_setup(callback.message, state, edit=True)
+
+
+@router.callback_query(
+    StateFilter(CarouselFlow.insta_auto_waiting_for_text, CarouselFlow.insta_auto_waiting_for_background),
+    F.data.startswith("insta_layout:"),
+)
+async def insta_layout_selected(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    layout_style = callback.data.split(":", 1)[1]
+    if layout_style not in LAYOUT_STYLE_LABELS and layout_style != "auto":
+        return
+    await state.update_data(insta_layout_style=layout_style)
     await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
     await show_insta_auto_setup(callback.message, state, edit=True)
 
@@ -363,10 +381,90 @@ async def insta_reset_setup(callback: types.CallbackQuery, state: FSMContext):
         insta_theme_override="auto",
         insta_visual_mode="auto",
         insta_card_format="auto",
+        insta_layout_style="auto",
         insta_custom_bg_bytes=None,
     )
     await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
     await show_insta_auto_setup(callback.message, state, edit=True)
+
+
+@router.callback_query(
+    StateFilter(CarouselFlow.insta_auto_waiting_for_text, CarouselFlow.insta_auto_waiting_for_background),
+    F.data == "insta_make_cover",
+)
+async def insta_make_cover(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(CarouselFlow.insta_cover_waiting_for_text)
+    await callback.message.edit_text(
+        "🖼 Обложка в этом стиле\n\n"
+        "Отправьте текст для обложки. Я сгенерирую обложку в текущем визуальном стиле.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Назад к настройкам", callback_data="insta_cover_back")]
+        ]),
+    )
+
+
+@router.callback_query(CarouselFlow.insta_cover_waiting_for_text, F.data == "insta_cover_back")
+async def insta_cover_back(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
+    await show_insta_auto_setup(callback.message, state, edit=True)
+
+
+@router.message(CarouselFlow.insta_cover_waiting_for_text, F.text)
+async def insta_cover_text_received(message: types.Message, state: FSMContext):
+    is_valid, error_msg = validate_text_length(message.text)
+    if not is_valid:
+        await message.answer(error_msg)
+        return
+    data = await state.get_data()
+    visual_mode = data.get("insta_visual_mode", "auto")
+    from services.cover_renderer import VISUAL_MODE_TO_COVER_STYLE, COVER_FORMATS, COVER_STYLES, CoverPlan, render_cover_html
+    from services.gemini_client import generate_cover_plan
+    cover_style = VISUAL_MODE_TO_COVER_STYLE.get(visual_mode, "orange_poster")
+    base_text = message.text
+    format_key = "post"
+    await state.set_state(CarouselFlow.cover_processing)
+    status = await message.answer("🎨 Собираю обложку...")
+
+    try:
+        raw_plan = await generate_cover_plan(base_text, cover_style, format_key)
+        plan = CoverPlan(**raw_plan)
+        rendered_bytes = await asyncio.to_thread(render_cover_html, plan)
+    except Exception as exc:
+        logging.exception("Cover generation failed: %s", exc)
+        await status.edit_text("😔 Не удалось собрать обложку.")
+        await state.clear()
+        return
+
+    await status.delete()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Опубликовать", callback_data="cover_publish"),
+            InlineKeyboardButton(text="🔄 Другой вариант", callback_data="cover_regenerate"),
+        ],
+        [InlineKeyboardButton(text="🎨 Другой стиль", callback_data="cover_change_style")],
+    ])
+    await message.answer_photo(
+        BufferedInputFile(
+            rendered_bytes,
+            filename=f"cover_{plan.style}_{plan.format_key}.png",
+        ),
+        caption=(
+            "🖼 Обложка готова\n"
+            f"Стиль: {COVER_STYLES[plan.style]['label']}\n"
+            f"Формат: {COVER_FORMATS[plan.format_key]['label']}\n"
+            "Автор: chu_il"
+        ),
+        reply_markup=kb,
+    )
+    await state.update_data(
+        cover_text=base_text,
+        cover_style=cover_style,
+        cover_format_key=format_key,
+        cover_background_data_url="",
+    )
+    await state.clear()
 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: types.Message, state: FSMContext):

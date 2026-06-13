@@ -8,6 +8,18 @@ import re
 
 COVER_AUTHOR = "chu_il"
 
+VISUAL_MODE_TO_COVER_STYLE = {
+    "auto": "orange_poster",
+    "calm": "quiet_editorial",
+    "business": "paper_brief",
+    "facts": "blue_type",
+    "contrast": "red_manifesto",
+    "editorial": "quiet_editorial",
+    "brief": "paper_brief",
+    "data": "blue_type",
+    "classic": "orange_poster",
+}
+
 COVER_FORMATS = {
     "wide": {"label": "16:9", "width": 1920, "height": 1080},
     "post": {"label": "4:5", "width": 1080, "height": 1350},
@@ -16,7 +28,7 @@ COVER_FORMATS = {
 
 COVER_STYLES = {
     "orange_poster": {
-        "label": "Orange Poster",
+        "label": "Оранжевый постер",
         "class": "cover-orange-poster",
         "bg": "#f45124",
         "text": "#07080b",
@@ -26,7 +38,7 @@ COVER_STYLES = {
         "line": "#05070a",
     },
     "acid_poster": {
-        "label": "Acid Poster",
+        "label": "Кислотный постер",
         "class": "cover-acid-poster",
         "bg": "#d7ff37",
         "text": "#071006",
@@ -36,7 +48,7 @@ COVER_STYLES = {
         "line": "#071006",
     },
     "retro_polaroid": {
-        "label": "Retro Film Burn",
+        "label": "Плёночный архив",
         "class": "cover-retro-polaroid",
         "bg": "#161b1c",
         "text": "#fff2d3",
@@ -46,7 +58,7 @@ COVER_STYLES = {
         "line": "#fff2d3",
     },
     "blue_type": {
-        "label": "Blue Type",
+        "label": "Синяя типографика",
         "class": "cover-blue-type",
         "bg": "#f3f0ec",
         "text": "#1048ff",
@@ -56,7 +68,7 @@ COVER_STYLES = {
         "line": "#1048ff",
     },
     "grid_steps": {
-        "label": "Grid Steps",
+        "label": "Сетка и шаги",
         "class": "cover-grid-steps",
         "bg": "#f6f5f0",
         "text": "#141414",
@@ -66,7 +78,7 @@ COVER_STYLES = {
         "line": "#1551ff",
     },
     "blur_field": {
-        "label": "Blur Field",
+        "label": "Размытое движение",
         "class": "cover-blur-field",
         "bg": "#ee321f",
         "text": "#161616",
@@ -74,6 +86,50 @@ COVER_STYLES = {
         "pill_bg": "#161616",
         "pill_text": "#fff7f0",
         "line": "#161616",
+    },
+    "red_manifesto": {
+        "label": "Красный манифест",
+        "button": "Красный манифест",
+        "class": "cover-red-manifesto",
+        "bg": "#ecebe3",
+        "text": "#c91f27",
+        "muted": "#111111",
+        "pill_bg": "#c91f27",
+        "pill_text": "#fffaf1",
+        "line": "#111111",
+    },
+    "paper_brief": {
+        "label": "Бумажный разбор",
+        "button": "Бумажный разбор",
+        "class": "cover-paper-brief",
+        "bg": "#f4f1e8",
+        "text": "#d21d24",
+        "muted": "#151515",
+        "pill_bg": "#151515",
+        "pill_text": "#f4f1e8",
+        "line": "#d21d24",
+    },
+    "quiet_editorial": {
+        "label": "Тихий журнал",
+        "button": "Тихий журнал",
+        "class": "cover-quiet-editorial",
+        "bg": "#f7f3ea",
+        "text": "#18221f",
+        "muted": "#56615c",
+        "pill_bg": "#18221f",
+        "pill_text": "#f7f3ea",
+        "line": "#a46a3f",
+    },
+    "chalk_notes": {
+        "label": "Ручные заметки",
+        "button": "Ручные заметки",
+        "class": "cover-chalk-notes",
+        "bg": "#fffefd",
+        "text": "#2457bc",
+        "muted": "#222222",
+        "pill_bg": "#fffefd",
+        "pill_text": "#222222",
+        "line": "#ef5b2d",
     },
 }
 
@@ -90,6 +146,7 @@ class CoverPlan:
     format_key: str
     footer_right: str = COVER_AUTHOR
     background_data_url: str = ""
+    cta_text: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -119,6 +176,7 @@ def normalize_cover_plan(raw_plan: dict | None, base_text: str, style: str, form
         format_key=normalized_format,
         footer_right=COVER_AUTHOR,
         background_data_url=_safe_background_data_url(str(raw_plan.get("background_data_url") or "")),
+        cta_text=_clean_text(str(raw_plan.get("cta_text") or ""), 32),
     )
 
 
@@ -143,8 +201,37 @@ def build_cover_html(plan: CoverPlan) -> str:
         else ""
     )
 
-    if is_retro:
+    _template_map = {
+        "retro_polaroid": "retro",
+        "quiet_editorial": "magazine",
+        "paper_brief": "magazine",
+        "blue_type": "terminal",
+        "grid_steps": "terminal",
+    }
+    template = _template_map.get(plan.style, "poster")
+
+    if template == "retro":
         body_markup = _retro_markup(
+            headline=headline,
+            subtitle=subtitle,
+            eyebrow_left=eyebrow_left,
+            eyebrow_right=eyebrow_right,
+            footer_left=footer_left,
+            footer_right=footer_right,
+            symbol=symbol,
+        )
+    elif template == "magazine":
+        body_markup = _magazine_markup(
+            headline=headline,
+            subtitle=subtitle,
+            eyebrow_left=eyebrow_left,
+            eyebrow_right=eyebrow_right,
+            footer_left=footer_left,
+            footer_right=footer_right,
+            symbol=symbol,
+        )
+    elif template == "terminal":
+        body_markup = _terminal_markup(
             headline=headline,
             subtitle=subtitle,
             eyebrow_left=eyebrow_left,
@@ -173,12 +260,33 @@ def build_cover_html(plan: CoverPlan) -> str:
         "story": "500px",
     }.get(plan.format_key, "302px")
     line_bottom = "118px" if plan.format_key != "story" else "158px"
+    cta_markup = ""
+    if plan.cta_text:
+        cta_bottom = str(int(line_bottom.replace("px", "")) - 16) + "px"
+        cta_markup = f"""
+    <div class="cover-cta">{html.escape(plan.cta_text)}</div>
+    """
+
+    _overlay_map = {
+        "orange_poster": ("0.56", "contrast(1.05) saturate(0.9)", "rgba(244,81,36,0.22)"),
+        "acid_poster": ("0.52", "contrast(1.08) saturate(0.85)", "rgba(215,255,55,0.18)"),
+        "retro_polaroid": ("0.74", "contrast(1.08) saturate(0.92)", "linear-gradient(90deg, rgba(10,14,16,0.42), rgba(255,140,48,0.24)), radial-gradient(circle at 14% 78%, rgba(255,220,40,0.38), transparent 28%)"),
+        "blue_type": ("0.54", "contrast(1.04) saturate(0.95)", "rgba(16,72,255,0.14)"),
+        "grid_steps": ("0.56", "contrast(1.06) saturate(0.92)", "rgba(21,81,255,0.16)"),
+        "blur_field": ("0.62", "contrast(1.1) saturate(0.88)", "linear-gradient(180deg, rgba(0,0,0,0.28), rgba(210,50,30,0.18))"),
+        "red_manifesto": ("0.54", "contrast(1.04) saturate(0.94)", "rgba(201,31,39,0.16)"),
+        "paper_brief": ("0.56", "contrast(1.02) saturate(0.96)", "rgba(210,29,36,0.12)"),
+        "quiet_editorial": ("0.58", "contrast(1.03) saturate(0.95)", "rgba(164,106,63,0.14)"),
+        "chalk_notes": ("0.56", "contrast(1.04) saturate(0.94)", "rgba(36,87,188,0.12)"),
+    }
+    ov = _overlay_map.get(plan.style, ("0.58", "contrast(1.05) saturate(0.9)", "rgba(255,255,255,0.18)"))
 
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Unbounded:wght@400;700;900&family=JetBrains+Mono:wght@400;700;900&display=swap');
     * {{
       box-sizing: border-box;
     }}
@@ -205,15 +313,15 @@ def build_cover_html(plan: CoverPlan) -> str:
       inset: 0;
       background-size: cover;
       background-position: center;
-      opacity: {("0.74" if is_retro else "0.58")};
-      filter: {("contrast(1.08) saturate(0.92)" if is_retro else "contrast(1.05) saturate(0.9)")};
+      opacity: {ov[0]};
+      filter: {ov[1]};
       z-index: 0;
     }}
     .custom-background::after {{
       content: "";
       position: absolute;
       inset: 0;
-      background: {("linear-gradient(90deg, rgba(10,14,16,0.42), rgba(255,140,48,0.24)), radial-gradient(circle at 14% 78%, rgba(255,220,40,0.38), transparent 28%)" if is_retro else "rgba(255,255,255,0.18)")};
+      background: {ov[2]};
     }}
     .cover-canvas::before {{
       content: "";
@@ -459,7 +567,7 @@ def build_cover_html(plan: CoverPlan) -> str:
     }}
     .cover-blue-type .cover-headline {{
       max-width: {("1460px" if plan.format_key == "wide" else "970px")};
-      font-family: Arial, "Helvetica Neue", sans-serif;
+      font-family: "JetBrains Mono", Arial, "Helvetica Neue", sans-serif;
       font-size: {headline_size}px;
       line-height: 0.82;
       font-weight: 950;
@@ -470,6 +578,14 @@ def build_cover_html(plan: CoverPlan) -> str:
     .cover-blue-type .cover-symbol,
     .cover-blue-type .cover-bottom-line {{
       display: none;
+    }}
+    .cover-terminal-prompt {{
+      color: {style_tokens["text"]};
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, monospace;
+      font-size: {("28" if plan.format_key != "story" else "36")}px;
+      font-weight: 400;
+      margin-bottom: 16px;
+      opacity: 0.6;
     }}
     .cover-grid-steps .cover-canvas::after {{
       content: "";
@@ -504,26 +620,377 @@ def build_cover_html(plan: CoverPlan) -> str:
     }}
     .cover-blur-field .cover-canvas {{
       background:
-        radial-gradient(circle at 20% 10%, #fff 0 12%, transparent 18%),
-        radial-gradient(circle at 82% 34%, #fff 0 12%, transparent 19%),
-        radial-gradient(circle at 40% 58%, #fff 0 13%, transparent 21%),
-        radial-gradient(circle at 78% 88%, #fff 0 11%, transparent 18%),
-        #ee321f;
-      filter: contrast(1.04);
+        linear-gradient(180deg, rgba(16,12,10,0.72), rgba(24,18,14,0.1) 36%, rgba(9,6,6,0.8)),
+        linear-gradient(180deg, #17100e 0 18%, #6d2a20 18% 42%, #d3b88f 42% 58%, #9c2d20 58% 76%, #120c0b 76% 100%);
+      filter: contrast(1.08) saturate(0.94);
     }}
     .cover-blur-field .cover-canvas::before {{
-      background: radial-gradient(rgba(255,255,255,0.12) 1px, transparent 1px);
-      background-size: 5px 5px;
-      opacity: 0.4;
+      background:
+        linear-gradient(0deg, transparent 0 18%, rgba(255,255,255,0.42) 18.2% 18.8%, transparent 19.2% 72%, rgba(255,255,255,0.36) 72.3% 73%, transparent 73.5%),
+        linear-gradient(90deg, rgba(255,255,255,0.12), transparent 20%, rgba(255,255,255,0.18) 52%, transparent 74%);
+      background-size: 100% 100%;
+      opacity: 0.58;
+    }}
+    .cover-blur-field .cover-canvas::after {{
+      content: "";
+      position: absolute;
+      left: -18%;
+      right: -18%;
+      top: {("250px" if plan.format_key == "wide" else "330px" if plan.format_key == "post" else "560px")};
+      height: {("360px" if plan.format_key == "wide" else "470px" if plan.format_key == "post" else "640px")};
+      background:
+        linear-gradient(0deg, transparent 0 10%, rgba(255,255,255,0.32) 10% 17%, transparent 17% 47%, rgba(255,255,255,0.22) 47% 56%, transparent 56%),
+        linear-gradient(90deg, rgba(112,32,24,0.92), rgba(210,160,112,0.72) 34%, rgba(235,214,174,0.82) 51%, rgba(154,41,27,0.9) 72%, rgba(95,24,20,0.94));
+      filter: blur(22px);
+      transform: scaleX(1.18);
+      opacity: 0.78;
+      z-index: 1;
+    }}
+    .cover-blur-field .cover-main {{
+      left: {("120px" if plan.format_key == "wide" else "72px")};
+      right: {("120px" if plan.format_key == "wide" else "72px")};
+      top: {("600px" if plan.format_key == "wide" else "810px" if plan.format_key == "post" else "1180px")};
+      z-index: 5;
     }}
     .cover-blur-field .cover-headline {{
-      font-family: Arial, "Helvetica Neue", sans-serif;
-      font-size: {max(74, headline_size - 18)}px;
-      line-height: 0.94;
-      font-weight: 800;
+      color: #ffffff;
+      font-family: "Unbounded", Impact, "Arial Black", "Arial Narrow", Arial, sans-serif;
+      font-size: {("118" if plan.format_key == "wide" else "104" if plan.format_key == "post" else "112")}px;
+      line-height: 0.82;
+      font-weight: 950;
       text-transform: uppercase;
-      opacity: 0.88;
-      text-shadow: -18px 0 10px rgba(0,0,0,0.22);
+      opacity: 1;
+      text-shadow: 0 16px 42px rgba(0,0,0,0.46);
+    }}
+    .cover-blur-field .cover-subtitle {{
+      color: rgba(255,255,255,0.92);
+      font-family: "SFMono-Regular", Menlo, Monaco, monospace;
+      font-size: {("26" if plan.format_key != "story" else "30")}px;
+      letter-spacing: 9px;
+      text-transform: uppercase;
+      margin-top: 34px;
+      max-width: none;
+    }}
+    .cover-blur-field .cover-pill,
+    .cover-blur-field .cover-meta {{
+      color: #fff;
+      background: transparent;
+      letter-spacing: 7px;
+    }}
+    .cover-blur-field .cover-symbol {{
+      display: none;
+    }}
+    .cover-blur-field .cover-bottom-line {{
+      height: 4px;
+      background: rgba(255,255,255,0.92);
+      bottom: {("178px" if plan.format_key != "story" else "250px")};
+    }}
+    .cover-blur-field .cover-footer {{
+      color: rgba(255,255,255,0.92);
+      letter-spacing: 8px;
+    }}
+    .cover-red-manifesto .cover-canvas {{
+      background:
+        radial-gradient(circle at 62% 46%, rgba(0,0,0,0.11), transparent 16%),
+        linear-gradient(0deg, rgba(0,0,0,0.035) 0 1px, transparent 1px),
+        #ecebe3;
+      background-size: 100% 100%, 100% 142px, 100% 100%;
+    }}
+    .cover-red-manifesto .cover-canvas::after {{
+      content: "";
+      position: absolute;
+      left: {("760px" if plan.format_key == "wide" else "360px")};
+      top: {("310px" if plan.format_key == "wide" else "520px" if plan.format_key == "post" else "810px")};
+      width: {("520px" if plan.format_key == "wide" else "610px")};
+      height: {("520px" if plan.format_key == "wide" else "610px")};
+      background:
+        linear-gradient(88deg, transparent 0 38%, rgba(0,0,0,0.76) 38% 53%, transparent 53%),
+        linear-gradient(171deg, transparent 0 44%, rgba(0,0,0,0.76) 44% 59%, transparent 59%);
+      transform: rotate(-10deg);
+      z-index: 1;
+    }}
+    .cover-red-manifesto .cover-top {{
+      top: {("46px" if plan.format_key != "story" else "76px")};
+    }}
+    .cover-red-manifesto .cover-pill {{
+      border-radius: 0;
+      min-height: 42px;
+      padding: 0 14px;
+      font-size: 15px;
+    }}
+    .cover-red-manifesto .cover-main {{
+      left: {("44px" if plan.format_key == "wide" else "42px")};
+      right: {("44px" if plan.format_key == "wide" else "34px")};
+      top: {("178px" if plan.format_key == "wide" else "246px" if plan.format_key == "post" else "390px")};
+      z-index: 4;
+    }}
+    .cover-red-manifesto .cover-headline {{
+      max-width: {("1780px" if plan.format_key == "wide" else "980px")};
+      color: #c91f27;
+      font-family: Impact, "Arial Narrow", "Arial Black", Arial, sans-serif;
+      font-size: {("188" if plan.format_key == "wide" else "156" if plan.format_key == "post" else "164")}px;
+      line-height: 0.84;
+      font-stretch: condensed;
+      font-weight: 950;
+      text-transform: uppercase;
+    }}
+    .cover-red-manifesto .cover-subtitle {{
+      max-width: {("470px" if plan.format_key == "wide" else "360px")};
+      margin-top: {("36px" if plan.format_key != "story" else "52px")};
+      color: #151515;
+      font-size: {("26" if plan.format_key == "wide" else "24")}px;
+      font-weight: 500;
+      line-height: 1.08;
+    }}
+    .cover-red-manifesto .cover-symbol {{
+      display: none;
+    }}
+    .cover-paper-brief .cover-canvas {{
+      background:
+        linear-gradient(90deg, rgba(0,0,0,0.05), transparent 14%, transparent 86%, rgba(0,0,0,0.05)),
+        radial-gradient(circle at 50% 0, rgba(0,0,0,0.08), transparent 34%),
+        linear-gradient(#f7f4eb, #e4dfd2);
+    }}
+    .cover-paper-brief .cover-canvas::after {{
+      content: "";
+      position: absolute;
+      left: {("150px" if plan.format_key == "wide" else "64px")};
+      right: {("150px" if plan.format_key == "wide" else "64px")};
+      top: {("96px" if plan.format_key == "wide" else "116px" if plan.format_key == "post" else "210px")};
+      bottom: {("96px" if plan.format_key == "wide" else "116px" if plan.format_key == "post" else "210px")};
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 26px 72px rgba(0,0,0,0.18);
+      z-index: 1;
+    }}
+    .cover-paper-brief .cover-top {{
+      left: {("210px" if plan.format_key == "wide" else "98px")};
+      right: {("210px" if plan.format_key == "wide" else "98px")};
+      top: {("132px" if plan.format_key == "wide" else "160px" if plan.format_key == "post" else "270px")};
+      z-index: 5;
+    }}
+    .cover-paper-brief .cover-pill {{
+      display: none;
+    }}
+    .cover-paper-brief .cover-meta {{
+      margin-left: auto;
+      color: #d21d24;
+      font-size: 24px;
+      font-family: "Arial Narrow", Arial, sans-serif;
+      font-weight: 950;
+    }}
+    .cover-paper-brief .cover-main {{
+      left: {("210px" if plan.format_key == "wide" else "98px")};
+      right: {("210px" if plan.format_key == "wide" else "98px")};
+      top: {("210px" if plan.format_key == "wide" else "250px" if plan.format_key == "post" else "390px")};
+      z-index: 5;
+    }}
+    .cover-paper-brief .cover-headline {{
+      max-width: {("1420px" if plan.format_key == "wide" else "880px")};
+      color: #d21d24;
+      font-family: "Unbounded", Impact, "Arial Narrow", "Arial Black", Arial, sans-serif;
+      font-size: {("162" if plan.format_key == "wide" else "136" if plan.format_key == "post" else "144")}px;
+      line-height: 0.82;
+      text-transform: uppercase;
+      font-weight: 950;
+    }}
+    .cover-paper-brief .cover-subtitle {{
+      position: absolute;
+      top: {("360px" if plan.format_key == "wide" else "470px" if plan.format_key == "post" else "780px")};
+      left: 0;
+      max-width: {("460px" if plan.format_key == "wide" else "360px")};
+      font-family: "SFMono-Regular", Menlo, Monaco, monospace;
+      color: #151515;
+      font-size: {("19" if plan.format_key == "wide" else "18")}px;
+      line-height: 1.05;
+      font-weight: 500;
+    }}
+    .cover-paper-brief .cover-subtitle::before {{
+      content: "(1)";
+      display: block;
+      margin-bottom: 8px;
+      font-family: "SFMono-Regular", Menlo, Monaco, monospace;
+      font-size: 18px;
+      color: #151515;
+    }}
+    .cover-paper-brief .cover-symbol {{
+      right: {("210px" if plan.format_key == "wide" else "110px")};
+      top: auto;
+      bottom: {("170px" if plan.format_key == "wide" else "214px" if plan.format_key == "post" else "320px")};
+      width: 34px;
+      height: 34px;
+      overflow: hidden;
+      background: #d21d24;
+      color: #d21d24;
+      font-size: 1px;
+    }}
+    .cover-paper-brief .cover-footer {{
+      left: {("210px" if plan.format_key == "wide" else "98px")};
+      right: {("210px" if plan.format_key == "wide" else "98px")};
+      bottom: {("126px" if plan.format_key == "wide" else "154px" if plan.format_key == "post" else "244px")};
+      color: #151515;
+      font-family: "SFMono-Regular", Menlo, Monaco, monospace;
+      font-size: 16px;
+      font-weight: 600;
+    }}
+    .cover-paper-brief .cover-bottom-line {{
+      left: {("210px" if plan.format_key == "wide" else "98px")};
+      right: {("210px" if plan.format_key == "wide" else "98px")};
+      bottom: {("190px" if plan.format_key == "wide" else "230px" if plan.format_key == "post" else "360px")};
+      height: 1px;
+      background: rgba(0,0,0,0.28);
+    }}
+    .cover-quiet-editorial .cover-canvas {{
+      background:
+        radial-gradient(circle at 18% 18%, rgba(164,106,63,0.14), transparent 22%),
+        linear-gradient(90deg, rgba(24,34,31,0.05) 0 1px, transparent 1px),
+        #f7f3ea;
+      background-size: 100% 100%, 96px 100%, 100% 100%;
+    }}
+    .cover-quiet-editorial .cover-top {{
+      left: {("110px" if plan.format_key == "wide" else "76px")};
+      right: {("110px" if plan.format_key == "wide" else "76px")};
+      top: {("74px" if plan.format_key != "story" else "118px")};
+    }}
+    .cover-quiet-editorial .cover-pill {{
+      min-height: 38px;
+      border-radius: 999px;
+      padding: 0 16px;
+      background: transparent;
+      border: 1px solid rgba(24,34,31,0.34);
+      color: #18221f;
+      font-size: 14px;
+      font-weight: 700;
+    }}
+    .cover-quiet-editorial .cover-main {{
+      left: {("110px" if plan.format_key == "wide" else "76px")};
+      right: {("420px" if plan.format_key == "wide" else "96px")};
+      top: {("220px" if plan.format_key == "wide" else "360px" if plan.format_key == "post" else "560px")};
+    }}
+    .cover-quiet-editorial .cover-headline {{
+      max-width: {("900px" if plan.format_key == "wide" else "720px")};
+      color: #18221f;
+      font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+      font-size: {("104" if plan.format_key == "wide" else "90" if plan.format_key == "post" else "96")}px;
+      line-height: 0.96;
+      font-weight: 400;
+      text-transform: none;
+    }}
+    .cover-quiet-editorial .cover-subtitle {{
+      max-width: 520px;
+      color: #56615c;
+      font-size: {("28" if plan.format_key != "story" else "32")}px;
+      font-family: Arial, "Helvetica Neue", sans-serif;
+      font-weight: 500;
+      line-height: 1.22;
+    }}
+    .cover-quiet-editorial .cover-symbol {{
+      right: {("118px" if plan.format_key == "wide" else "76px")};
+      top: {("260px" if plan.format_key == "wide" else "210px" if plan.format_key == "post" else "300px")};
+      color: #a46a3f;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: {("140" if plan.format_key == "wide" else "118")}px;
+      opacity: 0.62;
+    }}
+    .cover-quiet-editorial .cover-bottom-line {{
+      height: 1px;
+      background: rgba(164,106,63,0.55);
+    }}
+    .cover-chalk-notes .cover-canvas {{
+      background:
+        radial-gradient(circle at 12% 24%, rgba(239,91,45,0.08), transparent 12%),
+        radial-gradient(circle at 70% 18%, rgba(35,153,102,0.08), transparent 12%),
+        #fffefd;
+    }}
+    .cover-chalk-notes .cover-canvas::after {{
+      content: "";
+      position: absolute;
+      left: {("90px" if plan.format_key == "wide" else "52px")};
+      right: {("90px" if plan.format_key == "wide" else "52px")};
+      top: {("110px" if plan.format_key == "wide" else "150px" if plan.format_key == "post" else "240px")};
+      height: {("380px" if plan.format_key == "wide" else "520px" if plan.format_key == "post" else "760px")};
+      background:
+        linear-gradient(92deg, transparent 0 18%, rgba(239,91,45,0.36) 18.3% 18.8%, transparent 19.2%),
+        linear-gradient(176deg, transparent 0 58%, rgba(36,87,188,0.28) 58.1% 58.8%, transparent 59.1%);
+      opacity: 0.75;
+      z-index: 1;
+    }}
+    .cover-chalk-notes .cover-top {{
+      display: none;
+    }}
+    .cover-chalk-notes .cover-main {{
+      left: {("96px" if plan.format_key == "wide" else "60px")};
+      right: {("96px" if plan.format_key == "wide" else "60px")};
+      top: {("130px" if plan.format_key == "wide" else "180px" if plan.format_key == "post" else "290px")};
+      z-index: 5;
+    }}
+    .cover-chalk-notes .cover-headline {{
+      max-width: {("1520px" if plan.format_key == "wide" else "910px")};
+      font-family: "Comic Sans MS", "Trebuchet MS", Arial, sans-serif;
+      font-size: {("122" if plan.format_key == "wide" else "108" if plan.format_key == "post" else "118")}px;
+      line-height: 1.06;
+      font-weight: 500;
+      text-transform: uppercase;
+      color: #2457bc;
+      text-shadow:
+        1px 1px 0 #ef5b2d,
+        -1px 1px 0 #239966,
+        2px -1px 0 #f2ce3d;
+    }}
+    .cover-chalk-notes .cover-headline .headline-line:nth-child(2n) {{
+      color: #ef5b2d;
+      padding-left: {("150px" if plan.format_key == "wide" else "80px")};
+    }}
+    .cover-chalk-notes .cover-headline .headline-line:nth-child(3n) {{
+      color: #239966;
+      padding-left: {("40px" if plan.format_key == "wide" else "24px")};
+    }}
+    .cover-chalk-notes .cover-subtitle {{
+      max-width: {("700px" if plan.format_key == "wide" else "620px")};
+      margin-top: {("42px" if plan.format_key != "story" else "70px")};
+      color: #222222;
+      font-family: "Trebuchet MS", Arial, sans-serif;
+      font-size: {("30" if plan.format_key == "wide" else "32")}px;
+      line-height: 1.18;
+      font-weight: 600;
+    }}
+    .cover-chalk-notes .cover-symbol {{
+      display: none;
+    }}
+    .cover-chalk-notes .cover-bottom-line {{
+      display: none;
+    }}
+    .cover-chalk-notes .cover-footer {{
+      color: #222222;
+      font-family: "Trebuchet MS", Arial, sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      text-transform: lowercase;
+    }}
+    .cover-cta {{
+      position: absolute;
+      left: 60px;
+      right: 60px;
+      bottom: {("132px" if plan.format_key != "story" else "196px")};
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 6;
+    }}
+    .cover-cta::before {{
+      content: "";
+      width: 8px;
+      height: 8px;
+      background: {style_tokens["text"]};
+      border-radius: 50%;
+      flex-shrink: 0;
+    }}
+    .cover-cta {{
+      color: {style_tokens["muted"]};
+      font-family: "SFMono-Regular", Menlo, Monaco, monospace;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
     }}
   </style>
 </head>
@@ -531,6 +998,7 @@ def build_cover_html(plan: CoverPlan) -> str:
   <div class="cover-canvas">
     {background_markup}
     {body_markup}
+    {cta_markup}
   </div>
 </body>
 </html>"""
@@ -605,6 +1073,59 @@ def _retro_markup(
       </div>
       <div class="film-code">CHU_IL · COLOR NEGATIVE</div>
     </section>
+    <div class="cover-bottom-line"></div>
+    <footer class="cover-footer">
+      <span>{footer_left}</span>
+      <span>{footer_right}</span>
+    </footer>
+    """
+
+
+def _magazine_markup(
+    headline: str,
+    subtitle: str,
+    eyebrow_left: str,
+    eyebrow_right: str,
+    footer_left: str,
+    footer_right: str,
+    symbol: str,
+) -> str:
+    return f"""
+    <div class="cover-top">
+      <div class="cover-pill">{eyebrow_left}</div>
+      <div class="cover-meta">{eyebrow_right}</div>
+    </div>
+    <main class="cover-main">
+      <div class="cover-subtitle">{subtitle}</div>
+      <h1 class="cover-headline">{headline}</h1>
+    </main>
+    <div class="cover-bottom-line"></div>
+    <footer class="cover-footer">
+      <span>{footer_left}</span>
+      <span>{footer_right}</span>
+    </footer>
+    """
+
+
+def _terminal_markup(
+    headline: str,
+    subtitle: str,
+    eyebrow_left: str,
+    eyebrow_right: str,
+    footer_left: str,
+    footer_right: str,
+    symbol: str,
+) -> str:
+    return f"""
+    <div class="cover-top">
+      <div class="cover-pill">{eyebrow_left}</div>
+      <div class="cover-meta">{eyebrow_right}</div>
+    </div>
+    <main class="cover-main">
+      <div class="cover-terminal-prompt">&gt; _</div>
+      <h1 class="cover-headline">{headline}</h1>
+      <div class="cover-subtitle">{subtitle}</div>
+    </main>
     <div class="cover-bottom-line"></div>
     <footer class="cover-footer">
       <span>{footer_left}</span>

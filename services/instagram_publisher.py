@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode, urlparse
@@ -235,7 +236,7 @@ class InstagramPublisher:
 
     def _build_signed_media_url(self, file_path: str) -> str:
         ttl = self.media_proxy_ttl_seconds
-        expires = str(int((__import__("time").time() + ttl) * 1000))
+        expires = str(int((time.time() + ttl) * 1000))
         prefix = f"{self.media_proxy_bot_alias}:" if self.media_proxy_bot_alias else ""
         payload = f"{prefix}{file_path}:{expires}".encode("utf-8")
         signature = hmac.new(
