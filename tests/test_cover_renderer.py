@@ -173,6 +173,8 @@ class CoverRendererTests(unittest.TestCase):
         self.assertIn("AI cover", html)
         self.assertIn("Своя композиция", html)
         self.assertIn("Space Grotesk", html)
+        self.assertIn("justify-content: space-between", html)
+        self.assertIn("min-height: 100%", html)
         self.assertNotIn("Шаблонный headline", html)
 
     def test_build_cover_html_falls_back_when_ai_html_body_invalid(self):

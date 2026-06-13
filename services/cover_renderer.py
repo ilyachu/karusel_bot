@@ -1065,6 +1065,14 @@ def _build_ai_cover_html(plan: CoverPlan) -> str:
       background: linear-gradient(180deg, rgba(244, 241, 232, 0.12), rgba(244, 241, 232, 0.22));
     }}
     .ai-stage {{ position: relative; z-index: 1; width: {width}px; height: {height}px; }}
+    .ai-stage > * {{
+      width: 100%;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 24px;
+    }}
   </style>
 </head>
 <body>

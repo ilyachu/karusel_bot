@@ -174,6 +174,14 @@ def _build_ai_slide_html(spec: LayoutSpec, custom_background_data_url: str = "")
     body {{ position: relative; background: #0b1020; }}
     {background_css}
     .ai-stage {{ position: relative; z-index: 1; width: 1080px; height: 1350px; }}
+    .ai-stage > * {{
+      width: 100%;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 24px;
+    }}
   </style>
 </head>
 <body>

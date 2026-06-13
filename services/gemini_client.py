@@ -248,6 +248,12 @@ async def attach_slide_html_to_plan(base_text: str, plan: dict) -> dict:
 - Не используй script, canvas, svg data uri, внешние картинки
 - Можно использовать Google Fonts по family name: Inter, Playfair Display, JetBrains Mono, Unbounded, Manrope, Space Grotesk, DM Serif Display
 - Текст бери только из данных слайда, не выдумывай новые факты
+- Не складывай весь текст в верхние 25% холста
+- Строй композицию по вертикали: верхний маркер/лейбл, главный блок в центре или средней зоне, поддержка/CTA внизу
+- Оставляй заметный воздух: минимум 18% пустого пространства на слайде
+- Длина строк должна быть читабельной: не делай длинные абзацы на всю ширину
+- Для role=hook и role=cta главный текст размещай в центре или нижней трети
+- Для role=checklist, role=proof, role=example используй 2-3 зоны, карточки или split-layout, чтобы взгляд шёл сверху вниз
 
 Исходный текст:
 {base_text}
@@ -300,6 +306,10 @@ async def generate_cover_html_body(base_text: str, style: str, format_key: str, 
 - Не используй script и внешние изображения
 - Если нужен шрифт, используй family name: Inter, Playfair Display, JetBrains Mono, Unbounded, Manrope, Space Grotesk, DM Serif Display
 - Используй только эти поля: headline, subtitle, eyebrow_left, eyebrow_right, footer_left, cta_text
+- Не ставь весь текст в самый верх; композиция должна держаться на 2-3 вертикальных зонах
+- Главный headline должен сидеть в центре или чуть ниже центра, а служебные элементы поддерживать ритм сверху и снизу
+- Держи сильную иерархию: один доминирующий элемент, один supporting block, один нижний anchor
+- Оставляй воздух и безопасные поля, чтобы обложка читалась как viral cover, а не как плотный текстовый лист
 
 Исходный текст:
 {base_text}
