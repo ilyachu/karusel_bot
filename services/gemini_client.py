@@ -250,6 +250,11 @@ async def attach_slide_html_to_plan(base_text: str, plan: dict) -> dict:
 
     mapping = await _request_slide_html_mapping(prompt)
     if not mapping:
+        logging.warning(
+            "Slide HTML generation returned no usable html_body values. layout_style=%s slides=%s",
+            layout_style,
+            len(slides),
+        )
         return plan
 
     enriched = deepcopy(plan)
@@ -297,13 +302,33 @@ async def generate_cover_html_body(base_text: str, style: str, format_key: str, 
 
     try:
         result = await _router_json_request(prompt)
-        return _clean_html_body(str(result.get("html_body", "")))
+        raw_html = str(result.get("html_body", ""))
+        cleaned = _clean_html_body(raw_html)
+        if not cleaned:
+            logging.warning(
+                "Cover HTML generation returned unusable html_body via router. style=%s format=%s keys=%s preview=%s",
+                style,
+                format_key,
+                sorted(result.keys()) if isinstance(result, dict) else [],
+                _preview_text(raw_html),
+            )
+        return cleaned
     except Exception as e:
         logging.error(f"Error in generate_cover_html_body: {e}")
 
     try:
         result = await _openai_json_request(prompt)
-        return _clean_html_body(str(result.get("html_body", "")))
+        raw_html = str(result.get("html_body", ""))
+        cleaned = _clean_html_body(raw_html)
+        if not cleaned:
+            logging.warning(
+                "Cover HTML generation returned unusable html_body via fallback. style=%s format=%s keys=%s preview=%s",
+                style,
+                format_key,
+                sorted(result.keys()) if isinstance(result, dict) else [],
+                _preview_text(raw_html),
+            )
+        return cleaned
     except Exception as fallback_error:
         logging.error(f"OpenAI fallback failed in generate_cover_html_body: {fallback_error}")
         return ""
@@ -422,23 +447,44 @@ async def _normalize_caption_language(source_text: str, caption: str) -> str:
 
 async def _request_slide_html_mapping(prompt: str) -> dict[int, str]:
     for requester in (_router_json_request, _openai_json_request):
+        requester_name = requester.__name__
         try:
             result = await requester(prompt)
             mapping: dict[int, str] = {}
-            for item in result.get("slides", []):
+            slides = result.get("slides", []) if isinstance(result, dict) else []
+            logging.info(
+                "Slide HTML raw response via %s: slides=%s",
+                requester_name,
+                len(slides) if isinstance(slides, list) else "invalid",
+            )
+            for item in slides:
                 try:
                     index = int(item.get("index", 0) or 0)
                 except (TypeError, ValueError):
                     index = 0
                 if index <= 0:
+                    logging.warning("Slide HTML item without valid index via %s: %s", requester_name, item)
                     continue
-                html_body = _clean_html_body(str(item.get("html_body", "")))
+                raw_html = str(item.get("html_body", ""))
+                html_body = _clean_html_body(raw_html)
                 if html_body:
                     mapping[index] = html_body
+                else:
+                    logging.warning(
+                        "Slide HTML unusable via %s for index=%s preview=%s",
+                        requester_name,
+                        index,
+                        _preview_text(raw_html),
+                    )
             if mapping:
                 return mapping
+            logging.warning(
+                "Slide HTML response via %s produced zero usable entries. raw_keys=%s",
+                requester_name,
+                sorted(result.keys()) if isinstance(result, dict) else [],
+            )
         except Exception as exc:
-            logging.error("Slide HTML generation failed: %s", exc)
+            logging.error("Slide HTML generation failed via %s: %s", requester_name, exc)
     return {}
 
 
@@ -452,6 +498,13 @@ def _clean_html_body(value: str) -> str:
     if not re.search(r"<[a-zA-Z][^>]*>", html_body):
         return ""
     return html_body
+
+
+def _preview_text(value: str, limit: int = 180) -> str:
+    normalized = re.sub(r"\s+", " ", (value or "")).strip()
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[:limit] + "..."
 
 
 def _sanitize_threads_summary(text: str) -> str:
