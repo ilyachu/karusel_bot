@@ -57,7 +57,7 @@ from services.layout_engine import (
     parse_carousel_plan,
     resolve_visual_mode,
 )
-from services.html_renderer import browser_binaries_hint, render_layout_spec_html
+from services.html_renderer import render_layout_spec_html
 from services.cover_renderer import image_bytes_to_data_url
 from services.instagram_publisher import InstagramPublisher
 from services.meta_publish import MetaCredentials, build_carousel_publish_plan, load_export_package
@@ -66,7 +66,6 @@ from services.threads_publisher import ThreadsPublisher
 from services.openai_speech import transcribe_voice
 from services.image_renderer import render_layout_spec
 from handlers.common import (
-    INSTA_CARD_FORMAT_LABELS,
     INSTA_REWRITE_LABELS,
     show_insta_auto_setup,
 )
@@ -281,9 +280,9 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
 
     layout_style = data.get("insta_layout_style", carousel_plan.layout_style)
     if not layout_style or layout_style == "auto":
-        import random
-        layout_style = random.choice(["magazine", "terminal", "poster", "carddeck"])
-    logging.info(f"Layout style chosen: {layout_style} (from state: {data.get('insta_layout_style')}, from plan: {carousel_plan.layout_style})")
+        # AI уже выбрал стиль в generate_instagram_carousel_plan — используем его
+        layout_style = carousel_plan.layout_style
+    logging.info(f"Layout style: {layout_style} (from state: {data.get('insta_layout_style')}, from plan: {carousel_plan.layout_style})")
     if layout_style and layout_style != "auto":
         from dataclasses import replace
         carousel_plan = replace(carousel_plan, layout_style=layout_style)
@@ -397,25 +396,24 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             export_dir,
             {"telegram_media_items": telegram_media_items},
         )
-    action_rows = [
-        [
-            InlineKeyboardButton(text="📸 Опубликовать в Instagram", callback_data=f"instagram_publish:{export_id}"),
-            InlineKeyboardButton(text="🧵 Опубликовать в Threads", callback_data=f"threads_publish:{export_id}"),
-        ]
-    ]
+    action_rows = []
     if message.from_user and message.from_user.id == ADMIN_ID:
+        action_rows.append(
+            [
+                InlineKeyboardButton(text="📸 Опубликовать в Instagram", callback_data=f"instagram_publish:{export_id}"),
+                InlineKeyboardButton(text="🧵 Опубликовать в Threads", callback_data=f"threads_publish:{export_id}"),
+            ]
+        )
         action_rows.append(
             [InlineKeyboardButton(text="🛰 Advanced Meta plan", callback_data=f"meta_prepare:{export_id}")]
         )
-    actions = InlineKeyboardMarkup(inline_keyboard=action_rows)
+    actions = InlineKeyboardMarkup(inline_keyboard=action_rows) if action_rows else None
 
     caption_preview = caption if len(caption) <= 1200 else caption[:1200] + "..."
-    card_format = data.get("insta_card_format", "auto")
     await message.answer(
         "✅ Карусель готова.\n\n"
         f"Слайдов: {len(slides_content)}\n"
         f"Подача текста: {INSTA_REWRITE_LABELS.get(rewrite_style, 'Коротко и ясно')}\n"
-        f"Формат карточек: {INSTA_CARD_FORMAT_LABELS.get(card_format, 'Авто')}\n"
         f"Стиль: {LAYOUT_STYLE_LABELS.get(layout_style, layout_style)}\n"
         f"Визуал: {VISUAL_MODE_LABELS.get(visual_decision.resolved_mode, visual_decision.resolved_mode)}"
         f"{' + свой фон' if custom_bg_bytes else ''}\n"
@@ -425,7 +423,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         reply_markup=actions,
     )
     if render_mode != "html":
-        await message.answer(browser_binaries_hint())
+        await message.answer("⚠️ Рендер в упрощённом формате. Для полноценных слайдов установите Chromium.")
     await state.clear()
 
 

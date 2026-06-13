@@ -103,7 +103,7 @@ async def cover_style_selected(callback: types.CallbackQuery, state: FSMContext)
         ),
         reply_markup=kb,
     )
-    await state.clear()
+    # НЕ очищаем state — данные нужны для регенерации и смены стиля
 
 
 @router.callback_query(CarouselFlow.cover_choosing_background, F.data == "cover_bg:default")
@@ -269,7 +269,7 @@ async def cover_regenerate(callback: types.CallbackQuery, state: FSMContext):
         ),
         reply_markup=kb,
     )
-    await state.clear()
+    # НЕ очищаем state — данные нужны для регенерации и смены стиля
 
 
 @router.callback_query(F.data == "cover_change_style")

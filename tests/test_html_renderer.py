@@ -1,7 +1,7 @@
 import unittest
 
 from services.html_renderer import build_slide_html
-from services.layout_engine import build_fallback_instagram_plan, build_instagram_layout_specs
+from services.layout_engine import build_fallback_instagram_plan, build_instagram_layout_specs, parse_carousel_plan
 
 
 class HtmlRendererTests(unittest.TestCase):
@@ -123,6 +123,56 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertIn("custom-bg", html)
         self.assertIn(data_url, html)
         self.assertIn("Свой фон", html)
+
+    def test_build_slide_html_prefers_ai_html_body_when_present(self):
+        plan = parse_carousel_plan(
+            {
+                "carousel": {"layout_style": "poster", "theme_hint": "creator_bold"},
+                "slides": [
+                    {
+                        "index": 1,
+                        "role": "hook",
+                        "title": "Шаблонный заголовок",
+                        "body": "Этот текст не должен попасть в итоговый HTML.",
+                        "html_body": (
+                            '<section style="font-family: Manrope; background:#101820; color:#f6f1e8; '
+                            'width:100%; height:100%; padding:72px;"><h1>AI slide</h1><p>Уникальная вёрстка.</p></section>'
+                        ),
+                    }
+                ],
+            }
+        )
+        spec = build_instagram_layout_specs(plan, layout_style="poster")[0]
+
+        html = build_slide_html(spec, logo_text="chu ai")
+
+        self.assertIn("AI slide", html)
+        self.assertIn("Уникальная вёрстка.", html)
+        self.assertIn("Manrope", html)
+        self.assertNotIn("Шаблонный заголовок", html)
+
+    def test_build_slide_html_falls_back_when_ai_html_body_missing_markup(self):
+        plan = parse_carousel_plan(
+            {
+                "carousel": {"layout_style": "terminal", "theme_hint": "research_mono"},
+                "slides": [
+                    {
+                        "index": 1,
+                        "role": "hook",
+                        "title": "Фолбэк заголовок",
+                        "body": "Фолбэк текст.",
+                        "html_body": "просто текст без html",
+                    }
+                ],
+            }
+        )
+        spec = build_instagram_layout_specs(plan, layout_style="terminal")[0]
+
+        html = build_slide_html(spec, logo_text="chu ai")
+
+        self.assertIn("Фолбэк заголовок", html)
+        self.assertIn("ascii-box", html)
+        self.assertNotIn("просто текст без html", html)
 
 
 if __name__ == "__main__":

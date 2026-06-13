@@ -1,5 +1,6 @@
 import html
 import logging
+import re
 
 from services.layout_engine import LayoutSpec, LAYOUT_STYLE_FONTS
 
@@ -15,6 +16,10 @@ def _google_fonts_link(layout_style: str) -> str:
 
 def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai", custom_background_data_url: str = "") -> str:
     """Route to the correct HTML builder based on layout_style."""
+    ai_html = _build_ai_slide_html(spec, custom_background_data_url)
+    if ai_html:
+        return ai_html
+
     style = spec.layout_style
     if style not in LAYOUT_STYLE_FONTS:
         style = "magazine"
@@ -114,6 +119,107 @@ FONT_MAP = {
     "rampart": "'Impact', 'Arial Black', sans-serif",
     "dela": "'Arial Black', 'Trebuchet MS', sans-serif",
 }
+
+AI_FONT_QUERIES = {
+    "inter": "Inter:wght@400;500;600;700;800",
+    "playfair display": "Playfair+Display:wght@400;700;900",
+    "jetbrains mono": "JetBrains+Mono:wght@400;500;700;800",
+    "unbounded": "Unbounded:wght@400;700;900",
+    "manrope": "Manrope:wght@400;500;700;800",
+    "space grotesk": "Space+Grotesk:wght@400;500;700",
+    "dm serif display": "DM+Serif+Display:ital@0;1",
+}
+
+
+def _build_ai_slide_html(spec: LayoutSpec, custom_background_data_url: str = "") -> str:
+    html_body = _sanitize_ai_html_body(spec.html_body)
+    if not html_body:
+        return ""
+
+    imports = _google_font_imports_for_html(spec.layout_style, html_body)
+    fonts_block = f'<link href="https://fonts.googleapis.com/css2?{imports}&display=swap" rel="stylesheet">' if imports else ""
+    safe_bg = _safe_data_image_url(custom_background_data_url)
+    background_markup = (
+        f'<div class="ai-custom-bg" style="background-image:url(&quot;{safe_bg}&quot;);"></div>'
+        if safe_bg
+        else ""
+    )
+    background_css = """
+    .ai-custom-bg {
+      position: absolute;
+      inset: 0;
+      background-position: center;
+      background-size: cover;
+      opacity: 0.22;
+      filter: contrast(1.06) saturate(0.9);
+      z-index: 0;
+    }
+    .ai-custom-bg::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(7, 10, 18, 0.08), rgba(7, 10, 18, 0.22));
+    }
+    """ if safe_bg else ""
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1080, initial-scale=1">
+  {fonts_block}
+  <style>
+    * {{ box-sizing: border-box; }}
+    html, body {{ margin: 0; width: 1080px; height: 1350px; overflow: hidden; }}
+    body {{ position: relative; background: #0b1020; }}
+    {background_css}
+    .ai-stage {{ position: relative; z-index: 1; width: 1080px; height: 1350px; }}
+  </style>
+</head>
+<body>
+  {background_markup}
+  <div class="ai-stage">{html_body}</div>
+</body>
+</html>"""
+
+
+def _sanitize_ai_html_body(value: str) -> str:
+    html_body = (value or "").strip()
+    if not html_body:
+        return ""
+    if "<script" in html_body.lower():
+        return ""
+    if not re.search(r"<[a-zA-Z][^>]*>", html_body):
+        return ""
+    return html_body
+
+
+def _google_font_imports_for_html(layout_style: str, html_body: str) -> str:
+    imports: list[str] = []
+    seen: set[str] = set()
+
+    def add_query(query: str) -> None:
+        if query and query not in seen:
+            seen.add(query)
+            imports.append(query)
+
+    add_query(LAYOUT_STYLE_FONTS.get(layout_style, LAYOUT_STYLE_FONTS["magazine"])["google"])
+    for family in _extract_font_families(html_body):
+        query = AI_FONT_QUERIES.get(family.lower())
+        if query:
+            add_query(query)
+
+    return "|".join(imports)
+
+
+def _extract_font_families(html_body: str) -> list[str]:
+    families: list[str] = []
+    for raw_value in re.findall(r"font-family\s*:\s*([^;\"']+|\"[^\"]+\"|'[^']+')", html_body, flags=re.IGNORECASE):
+        for family in str(raw_value).split(","):
+            clean = family.strip().strip("'\"")
+            if clean:
+                families.append(clean)
+    return families
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -515,30 +621,68 @@ def render_layout_spec_html(
     logo_text: str = "chu ai",
     custom_background_data_url: str = "",
 ) -> bytes:
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception as exc:
-        raise RuntimeError("Playwright is not installed") from exc
-
     html_content = build_slide_html(
         spec,
         logo_text=logo_text,
         custom_background_data_url=custom_background_data_url,
     )
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1080, "height": 1350}, device_scale_factor=1)
-        page.set_content(html_content, wait_until="load")
-        png = page.screenshot(
-            type="png",
-            clip={"x": 0, "y": 0, "width": 1080, "height": 1350},
-        )
-        browser.close()
-    return png
 
+    # Try Playwright first
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1080, "height": 1350}, device_scale_factor=1)
+            page.set_content(html_content, wait_until="load")
+            png = page.screenshot(
+                type="png",
+                clip={"x": 0, "y": 0, "width": 1080, "height": 1350},
+            )
+            browser.close()
+        return png
+    except Exception as exc:
+        logging.warning("Playwright HTML render failed, using Pillow fallback: %s", exc)
 
-def browser_binaries_hint() -> str:
-    return (
-        "⚠️ Для рендера через Chromium нужно установить Playwright: "
-        "`python -m playwright install chromium`"
-    )
+    # Pillow fallback: create a simple branded slide
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        from io import BytesIO
+        img = Image.new("RGB", (1080, 1350), (15, 20, 35))
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36)
+        except Exception:
+            font = ImageFont.load_default()
+            font_small = font
+        title = (spec.title or "Без заголовка").strip()
+        body = (spec.body or "").strip()
+        bbox = draw.textbbox((0, 0), title, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        x = (1080 - tw) // 2
+        y = (1350 - th) // 2 - 40
+        draw.text((x, y), title, fill=(255, 255, 255), font=font)
+        if body:
+            draw.text((80, y + th + 30), body[:200], fill=(180, 190, 210), font=font_small)
+        # Footer with logo
+        draw.text((72, 1240), logo_text or "chu ai", fill=(100, 120, 160), font=font_small)
+        draw.text((800, 1240), f"{spec.slide_index}/{spec.total_slides}", fill=(100, 120, 160), font=font_small)
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception as exc2:
+        logging.error("Pillow HTML fallback also failed: %s", exc2)
+        # Last resort: empty PNG
+        import struct, zlib
+        def _make_png(w, h):
+            raw = b""
+            for _ in range(h):
+                raw += b"\x00" + b"\x99" * w * 3
+            def _chunk(t, d):
+                c = t + d
+                return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
+            return (b"\x89PNG\r\n\x1a\n" +
+                    _chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) +
+                    _chunk(b"IDAT", zlib.compress(raw)) +
+                    _chunk(b"IEND", b""))
+        return _make_png(1080, 1350)

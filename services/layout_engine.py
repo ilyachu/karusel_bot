@@ -183,6 +183,7 @@ class SlidePlanEntry:
     density: str
     theme_hint: str
     supporting_cards: list[dict] = field(default_factory=list)
+    html_body: str = ""
 
 
 @dataclass(frozen=True)
@@ -259,6 +260,7 @@ class LayoutSpec:
     brand_mark: str = ""
     progress_style: str = "pill"
     supporting_cards: list[dict] = field(default_factory=list)
+    html_body: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -382,6 +384,7 @@ def _build_classic_layout_specs(plan: CarouselPlan, layout_style: str = "magazin
                 show_progress=total_slides > 1,
                 layout_style=layout_style,
                 supporting_cards=supporting_cards,
+                html_body=slide.html_body,
             )
         )
     return specs
@@ -420,6 +423,7 @@ def _build_editorial_layout_specs(plan: CarouselPlan, layout_style: str = "magaz
                 brand_mark="",
                 progress_style="line",
                 supporting_cards=_build_editorial_supporting_cards(slide, variant),
+                html_body=slide.html_body,
             )
         )
     return specs
@@ -457,6 +461,7 @@ def _build_brief_layout_specs(plan: CarouselPlan, layout_style: str = "magazine"
                 accent_spans=slide.emphasis or _infer_editorial_accent_spans(slide),
                 progress_style="line",
                 supporting_cards=_build_brief_supporting_cards(slide, variant),
+                html_body=slide.html_body,
             )
         )
     return specs
@@ -496,6 +501,7 @@ def _build_data_layout_specs(plan: CarouselPlan, layout_style: str = "magazine")
                 accent_spans=slide.emphasis or ([stat] if stat else _infer_editorial_accent_spans(slide)),
                 progress_style="line",
                 supporting_cards=supporting_cards,
+                html_body=slide.html_body,
             )
         )
     return specs
@@ -592,6 +598,7 @@ def parse_carousel_plan(raw_plan: dict) -> CarouselPlan:
                 density=str(slide.get("density", "medium")),
                 theme_hint=str(slide.get("theme_hint", raw_plan.get("carousel", {}).get("theme_hint", "business_dark"))),
                 supporting_cards=_normalize_supporting_cards(slide.get("supporting_cards")),
+                html_body=str(slide.get("html_body", "")).strip(),
             )
         )
 
@@ -635,6 +642,7 @@ def build_fallback_instagram_plan(slides_content: list[dict], theme_hint: str = 
                 density=density,
                 theme_hint=theme_hint,
                 supporting_cards=_normalize_supporting_cards(slide.get("supporting_cards")),
+                html_body=str(slide.get("html_body", "")).strip(),
             )
         )
 

@@ -152,6 +152,49 @@ class CoverRendererTests(unittest.TestCase):
         self.assertIn("data:image/png;base64,", html)
         self.assertIn("cover-blur-field", html)
 
+    def test_build_cover_html_prefers_ai_html_body_when_present(self):
+        plan = CoverPlan(
+            headline="Шаблонный headline",
+            subtitle="Шаблонный subtitle",
+            eyebrow_left="RAZBOR",
+            eyebrow_right="TODAY",
+            footer_left="ДЛЯ ЧИТАТЕЛЕЙ",
+            symbol="arrow",
+            style="orange_poster",
+            format_key="post",
+            html_body=(
+                '<section style="width:100%;height:100%;background:#0b1020;color:#f6f3ea;'
+                'padding:80px;font-family: Space Grotesk;"><h1>AI cover</h1><p>Своя композиция</p></section>'
+            ),
+        )
+
+        html = build_cover_html(plan)
+
+        self.assertIn("AI cover", html)
+        self.assertIn("Своя композиция", html)
+        self.assertIn("Space Grotesk", html)
+        self.assertNotIn("Шаблонный headline", html)
+
+    def test_build_cover_html_falls_back_when_ai_html_body_invalid(self):
+        plan = CoverPlan(
+            headline="Нормальный headline",
+            subtitle="Нормальный subtitle",
+            eyebrow_left="RAZBOR",
+            eyebrow_right="TODAY",
+            footer_left="ДЛЯ ЧИТАТЕЛЕЙ",
+            symbol="arrow",
+            style="orange_poster",
+            format_key="post",
+            html_body="только текст без тегов",
+        )
+
+        html = build_cover_html(plan)
+
+        self.assertIn("Нормальный", html)
+        self.assertIn("headline", html)
+        self.assertIn("cover-orange-poster", html)
+        self.assertNotIn("только текст без тегов", html)
+
     def test_render_cover_html_returns_png_for_all_styles(self):
         for style in COVER_STYLES:
             with self.subTest(style=style):

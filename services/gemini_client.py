@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+from copy import deepcopy
 
 from openai import AsyncOpenAI
 from services.cover_renderer import normalize_cover_plan
@@ -18,6 +19,13 @@ llm_client = AsyncOpenAI(
     base_url=NEURALDEEP_BASE_URL,
 )
 DEFAULT_MODEL = NEURALDEEP_MODEL
+
+LAYOUT_STYLE_PROMPTS = {
+    "magazine": "magazine: аналитика, эссе, разборы. Playfair Display или DM Serif Display, воздух, editorial rhythm, спокойная и умная композиция.",
+    "terminal": "terminal: технические обзоры, benchmarks, AI-новости. JetBrains Mono или IBM Plex Mono, CLI-эстетика, панели, прогресс, статусные строки.",
+    "poster": "poster: манифесты, анонсы, сильные утверждения. Unbounded или Space Grotesk, огромная типографика, цветовые блоки, жесткая композиция.",
+    "carddeck": "carddeck: списки, чеклисты, обучение. Inter или Manrope, стек карточек, glassmorphism, chips, dot progress.",
+}
 
 
 async def generate_final_slides(base_text: str, target_slides_count: int, rewrite_style: str) -> list[dict]:
@@ -146,7 +154,9 @@ async def generate_cover_plan(base_text: str, style: str, format_key: str) -> di
             logging.error(f"OpenAI fallback failed in generate_cover_plan: {fallback_error}")
             result = {}
 
-    return normalize_cover_plan(result, base_text, style, format_key).to_dict()
+    plan = normalize_cover_plan(result, base_text, style, format_key).to_dict()
+    plan["html_body"] = await generate_cover_html_body(base_text, style, format_key, plan)
+    return plan
 
 
 async def generate_instagram_carousel_plan(
@@ -165,23 +175,138 @@ async def generate_instagram_carousel_plan(
     prompt = f"""Собери JSON-план карусели из {target_slides_count} слайдов:
 {{"carousel": {{"goal": "instagram_carousel", "audience": "...", "tone": "clear_confident|bold_creator|premium_editorial", "theme_hint": "business_dark|minimal_light|creator_bold|editorial_premium|memory_archive|founder_brief|growth_black|research_mono", "cta": "save_and_follow|comment_and_dm|share_and_follow", "layout_style": "magazine|terminal|poster|carddeck"}}, "slides": [{{"index": 1, "role": "hook|context|point|proof|example|checklist|cta", "title": "...", "body": "...", "emphasis": ["..."], "supporting_cards": [{{"title": "1-2 слова", "body": "до 6 слов"}}], "density": "low|medium|high", "theme_hint": "..."}}]}}
 
-Правила: hook первый, cta последний. {style_instruction}. supporting_cards — 0-3 микро-тезиса, не копировать body. layout_style: magazine=разборы, terminal=техно, poster=манифесты, carddeck=списки.
+Правила: hook первый, cta последний. {style_instruction}. supporting_cards — 0-3 микро-тезиса, не копировать body.
+Выбери layout_style строго по контексту:
+- magazine: аналитика, эссе, разборы, спокойный умный тон
+- terminal: технические обзоры, benchmarks, AI-новости, инструменты
+- poster: манифесты, анонсы, резкие тезисы, сильные заявления
+- carddeck: списки, чеклисты, образовательный контент, how-to
+Не выбирай случайно: layout_style должен помогать именно этому материалу.
 
 Текст:
 {base_text}"""
 
     try:
         result = await _router_json_request(prompt)
-        return await _normalize_carousel_plan_language(base_text, result)
+        result = await _normalize_carousel_plan_language(base_text, result)
+        return await attach_slide_html_to_plan(base_text, result)
     except Exception as e:
         logging.error(f"Error in generate_instagram_carousel_plan: {e}")
 
     try:
         result = await _openai_json_request(prompt)
-        return await _normalize_carousel_plan_language(base_text, result)
+        result = await _normalize_carousel_plan_language(base_text, result)
+        return await attach_slide_html_to_plan(base_text, result)
     except Exception as fallback_error:
         logging.error(f"OpenAI fallback failed in generate_instagram_carousel_plan: {fallback_error}")
         return {}
+
+
+async def attach_slide_html_to_plan(base_text: str, plan: dict) -> dict:
+    if not isinstance(plan, dict) or not isinstance(plan.get("slides"), list):
+        return plan
+
+    slides = plan.get("slides", [])
+    if not slides:
+        return plan
+
+    layout_style = str(plan.get("carousel", {}).get("layout_style", "magazine"))
+    style_brief = LAYOUT_STYLE_PROMPTS.get(layout_style, LAYOUT_STYLE_PROMPTS["magazine"])
+    payload = {
+        "carousel": deepcopy(plan.get("carousel", {})),
+        "slides": [
+            {
+                "index": slide.get("index", idx + 1),
+                "role": slide.get("role", "point"),
+                "title": slide.get("title", ""),
+                "body": slide.get("body", ""),
+                "emphasis": slide.get("emphasis", []),
+                "supporting_cards": slide.get("supporting_cards", []),
+            }
+            for idx, slide in enumerate(slides)
+        ],
+    }
+    prompt = f"""Ты — арт-директор Instagram-каруселей.
+Верни JSON:
+{{"slides":[{{"index":1,"html_body":"<section style='...'>...</section>"}}]}}
+
+Нужно придумать уникальный body-level HTML для каждого слайда.
+Стиль: {style_brief}
+
+Требования:
+- Только body-level HTML, без <html>, <head>, <body>
+- Каждый слайд визуально отличается композицией, а не только цветом
+- Размер холста 1080x1350, используй width:100%; height:100%
+- Допустимы inline styles, <style>, gradients, shadows, flex, grid
+- Не используй script, canvas, svg data uri, внешние картинки
+- Можно использовать Google Fonts по family name: Inter, Playfair Display, JetBrains Mono, Unbounded, Manrope, Space Grotesk, DM Serif Display
+- Текст бери только из данных слайда, не выдумывай новые факты
+
+Исходный текст:
+{base_text}
+
+План карусели:
+{json.dumps(payload, ensure_ascii=False)}"""
+
+    mapping = await _request_slide_html_mapping(prompt)
+    if not mapping:
+        return plan
+
+    enriched = deepcopy(plan)
+    for slide in enriched.get("slides", []):
+        index = int(slide.get("index", 0) or 0)
+        html_body = _clean_html_body(mapping.get(index, ""))
+        if html_body:
+            slide["html_body"] = html_body
+    return enriched
+
+
+async def generate_cover_html_body(base_text: str, style: str, format_key: str, cover_plan: dict) -> str:
+    style_brief = {
+        "orange_poster": "агрессивный плакат, крупный headline, теплый контраст",
+        "acid_poster": "кислотный постер, панк-энергия, резкий ритм",
+        "retro_polaroid": "film burn, архивная атмосфера, кинопленка",
+        "blue_type": "огромная синяя типографика, минимум декора",
+        "grid_steps": "сетка, шаги, модульная композиция",
+        "blur_field": "типографика поверх размытого движения",
+        "red_manifesto": "редакционный манифест, газетный контраст",
+        "paper_brief": "деловой лист, заметки, underline и stamps",
+        "quiet_editorial": "тихий журнал, serif, много воздуха",
+        "chalk_notes": "маркерные заметки, ручной наклон, бумага",
+    }.get(style, "типографическая обложка")
+    prompt = f"""Верни JSON:
+{{"html_body":"<section style='...'>...</section>"}}
+
+Ты делаешь уникальную HTML-обложку.
+Стиль: {style_brief}
+Формат: {format_key}
+
+Требования:
+- Только body-level HTML, без <html>, <head>, <body>
+- Холст должен занимать всю площадь через width:100%; height:100%
+- Допустимы inline styles, <style>, gradients, texture-like blocks
+- Не используй script и внешние изображения
+- Если нужен шрифт, используй family name: Inter, Playfair Display, JetBrains Mono, Unbounded, Manrope, Space Grotesk, DM Serif Display
+- Используй только эти поля: headline, subtitle, eyebrow_left, eyebrow_right, footer_left, cta_text
+
+Исходный текст:
+{base_text}
+
+План обложки:
+{json.dumps(cover_plan, ensure_ascii=False)}"""
+
+    try:
+        result = await _router_json_request(prompt)
+        return _clean_html_body(str(result.get("html_body", "")))
+    except Exception as e:
+        logging.error(f"Error in generate_cover_html_body: {e}")
+
+    try:
+        result = await _openai_json_request(prompt)
+        return _clean_html_body(str(result.get("html_body", "")))
+    except Exception as fallback_error:
+        logging.error(f"OpenAI fallback failed in generate_cover_html_body: {fallback_error}")
+        return ""
 
 
 async def _router_json_request(prompt: str) -> dict:
@@ -293,6 +418,40 @@ async def _normalize_caption_language(source_text: str, caption: str) -> str:
     if not _is_russian_source(source_text):
         return caption
     return _normalize_russian_phrase(caption)
+
+
+async def _request_slide_html_mapping(prompt: str) -> dict[int, str]:
+    for requester in (_router_json_request, _openai_json_request):
+        try:
+            result = await requester(prompt)
+            mapping: dict[int, str] = {}
+            for item in result.get("slides", []):
+                try:
+                    index = int(item.get("index", 0) or 0)
+                except (TypeError, ValueError):
+                    index = 0
+                if index <= 0:
+                    continue
+                html_body = _clean_html_body(str(item.get("html_body", "")))
+                if html_body:
+                    mapping[index] = html_body
+            if mapping:
+                return mapping
+        except Exception as exc:
+            logging.error("Slide HTML generation failed: %s", exc)
+    return {}
+
+
+def _clean_html_body(value: str) -> str:
+    html_body = (value or "").strip()
+    if html_body.startswith("```"):
+        html_body = re.sub(r"^```[a-zA-Z]*\n?", "", html_body)
+        html_body = re.sub(r"\n?```$", "", html_body).strip()
+    if "<script" in html_body.lower():
+        return ""
+    if not re.search(r"<[a-zA-Z][^>]*>", html_body):
+        return ""
+    return html_body
 
 
 def _sanitize_threads_summary(text: str) -> str:

@@ -40,18 +40,20 @@ class FlowStructureTests(unittest.TestCase):
         source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
 
         self.assertIn("async def start_insta_creation_setup", source)
-        self.assertIn("async def cmd_create_carousel", source)
+        self.assertIn("async def cmd_insta_auto", source)
         self.assertIn("start_insta_creation_setup(", source)
 
     def test_insta_auto_style_packs_are_product_facing(self):
-        from handlers.common import INSTA_CARD_FORMAT_LABELS, INSTA_VISUAL_PRESETS
+        from handlers.common import INSTA_REWRITE_LABELS, INSTA_COLOR_LABELS
 
-        self.assertEqual(INSTA_VISUAL_PRESETS["calm"]["label"], "Спокойный")
-        self.assertIn("понятный шрифт", INSTA_VISUAL_PRESETS["calm"]["description"])
-        self.assertEqual(INSTA_VISUAL_PRESETS["contrast"]["label"], "Контрастный")
-        self.assertEqual(INSTA_VISUAL_PRESETS["contrast"]["theme"], "growth_black")
-        self.assertEqual(INSTA_VISUAL_PRESETS["contrast"]["visual_mode"], "editorial")
-        self.assertEqual(INSTA_CARD_FORMAT_LABELS["classic"], "Читабельно")
+        self.assertIn("exact", INSTA_REWRITE_LABELS)
+        self.assertIn("concise", INSTA_REWRITE_LABELS)
+        self.assertIn("educational", INSTA_REWRITE_LABELS)
+        self.assertIn("marketing", INSTA_REWRITE_LABELS)
+        self.assertIn("dark", INSTA_COLOR_LABELS)
+        self.assertIn("light", INSTA_COLOR_LABELS)
+        self.assertIn("warm", INSTA_COLOR_LABELS)
+        self.assertIn("bold", INSTA_COLOR_LABELS)
 
     def test_cover_flow_explains_wide_format_as_cross_posting(self):
         source = (PROJECT_ROOT / "handlers" / "cover_flow.py").read_text(encoding="utf-8")

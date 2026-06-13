@@ -1,16 +1,12 @@
-version: '3.8'
-
 services:
   bot:
     build: .
-    container_name: karusel_bot
+    container_name: karusel_bot_new
     restart: always
     env_file:
       - .env
     volumes:
       - ./data:/app/data
-      # Mount assets if you plan to add fonts dynamically
-      # - ./assets:/app/assets 
     logging:
       driver: "json-file"
       options:
@@ -19,10 +15,10 @@ services:
 
   exports:
     image: nginx:alpine
-    container_name: karusel_exports
+    container_name: karusel_exports_new
     restart: always
     ports:
-      - "127.0.0.1:8081:80"
+      - "127.0.0.1:8082:80"
     volumes:
       - ./data/exports:/usr/share/nginx/html:ro
     logging:

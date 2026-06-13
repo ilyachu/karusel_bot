@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 from dataclasses import asdict, dataclass
 import html
 import re
@@ -147,6 +148,7 @@ class CoverPlan:
     footer_right: str = COVER_AUTHOR
     background_data_url: str = ""
     cta_text: str = ""
+    html_body: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -177,10 +179,15 @@ def normalize_cover_plan(raw_plan: dict | None, base_text: str, style: str, form
         footer_right=COVER_AUTHOR,
         background_data_url=_safe_background_data_url(str(raw_plan.get("background_data_url") or "")),
         cta_text=_clean_text(str(raw_plan.get("cta_text") or ""), 32),
+        html_body=str(raw_plan.get("html_body") or "").strip(),
     )
 
 
 def build_cover_html(plan: CoverPlan) -> str:
+    ai_html = _build_ai_cover_html(plan)
+    if ai_html:
+        return ai_html
+
     style_tokens = COVER_STYLES.get(plan.style, COVER_STYLES["orange_poster"])
     fmt = COVER_FORMATS.get(plan.format_key, COVER_FORMATS["post"])
     width = fmt["width"]
@@ -1004,23 +1011,158 @@ def build_cover_html(plan: CoverPlan) -> str:
 </html>"""
 
 
-def render_cover_html(plan: CoverPlan) -> bytes:
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception as exc:
-        raise RuntimeError("Playwright is not installed") from exc
+AI_FONT_QUERIES = {
+    "inter": "Inter:wght@400;500;600;700;800",
+    "playfair display": "Playfair+Display:wght@400;700;900",
+    "unbounded": "Unbounded:wght@400;700;900",
+    "jetbrains mono": "JetBrains+Mono:wght@400;500;700;800",
+    "manrope": "Manrope:wght@400;500;700;800",
+    "space grotesk": "Space+Grotesk:wght@400;500;700",
+    "dm serif display": "DM+Serif+Display:ital@0;1",
+}
+
+
+def _build_ai_cover_html(plan: CoverPlan) -> str:
+    html_body = _sanitize_ai_html_body(plan.html_body)
+    if not html_body:
+        return ""
 
     fmt = COVER_FORMATS.get(plan.format_key, COVER_FORMATS["post"])
     width = fmt["width"]
     height = fmt["height"]
+    imports = _google_font_imports_for_html(html_body)
+    fonts_block = f'<link href="https://fonts.googleapis.com/css2?{imports}&display=swap" rel="stylesheet">' if imports else ""
+    safe_bg = _safe_background_data_url(plan.background_data_url)
+    background_markup = (
+        f'<div class="ai-custom-bg" style="background-image:url(&quot;{safe_bg}&quot;);"></div>'
+        if safe_bg
+        else ""
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width={width}, initial-scale=1">
+  {fonts_block}
+  <style>
+    * {{ box-sizing: border-box; }}
+    html, body {{ margin: 0; width: {width}px; height: {height}px; overflow: hidden; }}
+    body {{ position: relative; background: #f4f1e8; }}
+    .ai-custom-bg {{
+      position: absolute;
+      inset: 0;
+      background-position: center;
+      background-size: cover;
+      opacity: 0.24;
+      filter: contrast(1.04) saturate(0.9);
+      z-index: 0;
+    }}
+    .ai-custom-bg::after {{
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(244, 241, 232, 0.12), rgba(244, 241, 232, 0.22));
+    }}
+    .ai-stage {{ position: relative; z-index: 1; width: {width}px; height: {height}px; }}
+  </style>
+</head>
+<body>
+  {background_markup}
+  <div class="ai-stage">{html_body}</div>
+</body>
+</html>"""
+
+
+def _sanitize_ai_html_body(value: str) -> str:
+    html_body = (value or "").strip()
+    if not html_body:
+        return ""
+    if "<script" in html_body.lower():
+        return ""
+    if not re.search(r"<[a-zA-Z][^>]*>", html_body):
+        return ""
+    return html_body
+
+
+def _google_font_imports_for_html(html_body: str) -> str:
+    imports: list[str] = []
+    seen: set[str] = set()
+
+    for family in _extract_font_families(html_body):
+        query = AI_FONT_QUERIES.get(family.lower())
+        if query and query not in seen:
+            seen.add(query)
+            imports.append(query)
+
+    return "|".join(imports)
+
+
+def _extract_font_families(html_body: str) -> list[str]:
+    families: list[str] = []
+    for raw_value in re.findall(r"font-family\s*:\s*([^;\"']+|\"[^\"]+\"|'[^']+')", html_body, flags=re.IGNORECASE):
+        for family in str(raw_value).split(","):
+            clean = family.strip().strip("'\"")
+            if clean:
+                families.append(clean)
+    return families
+
+
+def render_cover_html(plan: CoverPlan) -> bytes:
+    fmt = COVER_FORMATS.get(plan.format_key, COVER_FORMATS["post"])
+    width = fmt["width"]
+    height = fmt["height"]
     html_content = build_cover_html(plan)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
-        page.set_content(html_content, wait_until="load")
-        png = page.screenshot(type="png", clip={"x": 0, "y": 0, "width": width, "height": height})
-        browser.close()
-    return png
+
+    # Try Playwright first, fall back to Pillow screenshot
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
+            page.set_content(html_content, wait_until="load")
+            png = page.screenshot(type="png", clip={"x": 0, "y": 0, "width": width, "height": height})
+            browser.close()
+        return png
+    except Exception as exc:
+        logging.warning("Playwright cover render failed, using Pillow fallback: %s", exc)
+
+    # Pillow fallback: render HTML to image via simple approach
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.new("RGB", (width, height), (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        # Draw headline
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)
+        except Exception:
+            font = ImageFont.load_default()
+        text = (plan.headline or "Обложка").strip()
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        x = (width - tw) // 2
+        y = (height - th) // 2
+        draw.text((x, y), text, fill=(20, 20, 30), font=font)
+        from io import BytesIO
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception as exc2:
+        logging.warning("Pillow cover fallback also failed: %s", exc2)
+        # Absolute last resort: return a minimal valid PNG
+        import struct, zlib
+        def _make_png(w, h):
+            raw = b""
+            for _ in range(h):
+                raw += b"\x00" + b"\xff" * w * 3
+            def _chunk(t, d):
+                c = t + d
+                return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
+            return (b"\x89PNG\r\n\x1a\n" +
+                    _chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) +
+                    _chunk(b"IDAT", zlib.compress(raw)) +
+                    _chunk(b"IEND", b""))
+        return _make_png(width, height)
 
 
 def _poster_markup(
