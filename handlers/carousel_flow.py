@@ -302,6 +302,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     rendered_buffers: list[BytesIO] = []
     media_group = []
     render_mode = "html"
+    fallback_reason = ""
     for layout_spec in layout_specs:
         if custom_bg_bytes:
             logging.info(f"Rendering slide {layout_spec.slide_index} with custom background")
@@ -316,6 +317,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             except Exception as exc:
                 logging.warning("HTML renderer unavailable for custom background, falling back to Pillow: %s", exc)
                 render_mode = "pillow-custom-bg"
+                fallback_reason = str(exc)
                 image_buffer = await asyncio.to_thread(
                     render_layout_spec,
                     layout_spec,
@@ -333,6 +335,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             except Exception as exc:
                 logging.warning("HTML renderer unavailable, falling back to Pillow: %s", exc)
                 render_mode = "pillow-fallback"
+                fallback_reason = str(exc)
                 image_buffer = render_layout_spec(
                     layout_spec,
                     logo_text=user_logo,
@@ -365,6 +368,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             "rewrite_style": rewrite_style,
             "custom_background": bool(custom_bg_bytes),
             "threads_summary": threads_summary,
+            "fallback_reason": fallback_reason,
         },
     )
     export_package = load_export_package(export_dir)
@@ -423,7 +427,12 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         reply_markup=actions,
     )
     if render_mode != "html":
-        await message.answer("⚠️ Рендер в упрощённом формате. Для полноценных слайдов установите Chromium.")
+        human_reason = "HTML-рендер недоступен в текущем контейнере."
+        if "playwright" in fallback_reason.lower() or "chromium" in fallback_reason.lower():
+            human_reason = "Chromium/Playwright недоступен в контейнере."
+        elif "html_body" in fallback_reason.lower():
+            human_reason = "На сервере оказались несовместимые версии renderer и layout-модели."
+        await message.answer(f"⚠️ Рендер в упрощённом формате.\nПричина: {human_reason}")
     await state.clear()
 
 

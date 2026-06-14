@@ -23,6 +23,9 @@ RUN useradd -m -u 1000 botuser && \
     chown -R botuser:botuser /app && \
     su botuser -c "python -m playwright install chromium 2>/dev/null"
 
+ENV HOME=/home/botuser
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/botuser/.cache/ms-playwright
+
 USER botuser
 
 CMD ["python", "main.py"]

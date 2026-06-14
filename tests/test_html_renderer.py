@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 
 from services.html_renderer import build_slide_html
 from services.layout_engine import build_fallback_instagram_plan, build_instagram_layout_specs, parse_carousel_plan
@@ -175,6 +176,25 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertIn("Фолбэк заголовок", html)
         self.assertIn("ascii-box", html)
         self.assertNotIn("просто текст без html", html)
+
+    def test_build_slide_html_is_backward_compatible_without_html_body_field(self):
+        legacy_spec = SimpleNamespace(
+            layout_style="magazine",
+            title="Legacy",
+            body="Legacy body",
+            badge_text="Заметка",
+            slide_index=1,
+            total_slides=2,
+            text_position="top",
+            theme="memory_archive",
+            footer_tags=[],
+            supporting_cards=[],
+        )
+
+        html = build_slide_html(legacy_spec, logo_text="chu ai")
+
+        self.assertIn("Legacy", html)
+        self.assertIn("<html", html.lower())
 
 
 if __name__ == "__main__":

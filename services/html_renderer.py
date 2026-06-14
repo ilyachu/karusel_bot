@@ -132,11 +132,11 @@ AI_FONT_QUERIES = {
 
 
 def _build_ai_slide_html(spec: LayoutSpec, custom_background_data_url: str = "") -> str:
-    html_body = _sanitize_ai_html_body(spec.html_body)
+    html_body = _sanitize_ai_html_body(getattr(spec, "html_body", ""))
     if not html_body:
         return ""
 
-    imports = _google_font_imports_for_html(spec.layout_style, html_body)
+    imports = _google_font_imports_for_html(getattr(spec, "layout_style", "magazine"), html_body)
     fonts_block = f'<link href="https://fonts.googleapis.com/css2?{imports}&display=swap" rel="stylesheet">' if imports else ""
     safe_bg = _safe_data_image_url(custom_background_data_url)
     background_markup = (

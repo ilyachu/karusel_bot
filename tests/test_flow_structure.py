@@ -77,6 +77,11 @@ class FlowStructureTests(unittest.TestCase):
         self.assertNotIn('preview_text, reply_markup=kb, parse_mode="Markdown"', source)
         self.assertNotIn("**Слайд", source)
 
+    def test_fallback_message_is_not_hardcoded_as_chromium_problem(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("Для полноценных слайдов установите Chromium.", source)
+
 
 if __name__ == "__main__":
     unittest.main()
