@@ -68,8 +68,14 @@ class FlowStructureTests(unittest.TestCase):
 
         style_buttons = [btn for row in keyboard.inline_keyboard for btn in row if btn.callback_data.startswith("cover_style:")]
         self.assertEqual(len(style_buttons), 10)
-        self.assertEqual(keyboard.inline_keyboard[0][0].text, "— Плакаты —")
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "— Группа: плакатные —")
         self.assertEqual(keyboard.inline_keyboard[1][0].text, "Оранжевый постер")
+
+    def test_insta_setup_copy_is_less_emoji_noisy(self):
+        from handlers.common import INSTA_REWRITE_LABELS, INSTA_COLOR_LABELS
+
+        self.assertEqual(INSTA_REWRITE_LABELS["concise"], "Короче")
+        self.assertEqual(INSTA_COLOR_LABELS["auto"], "Авто")
 
     def test_slide_preview_avoids_markdown_parse_mode(self):
         source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")

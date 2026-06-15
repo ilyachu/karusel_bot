@@ -21,18 +21,18 @@ router = Router()
 # ─── Понятные названия для пользователя ───
 
 INSTA_REWRITE_LABELS = {
-    "exact": "📝 Как есть",
-    "concise": "✂️ Короче",
-    "educational": "📚 Подробнее",
-    "marketing": "🔥 Ярче",
+    "exact": "Как есть",
+    "concise": "Короче",
+    "educational": "Подробнее",
+    "marketing": "Ярче",
 }
 
 INSTA_COLOR_LABELS = {
-    "auto": "🌈 Авто (AI подберёт)",
-    "dark": "🌙 Тёмная",
-    "light": "☀️ Светлая",
-    "warm": "🟤 Тёплая",
-    "bold": "💥 Яркая",
+    "auto": "Авто",
+    "dark": "Тёмная",
+    "light": "Светлая",
+    "warm": "Тёплая",
+    "bold": "Яркая",
 }
 
 # Маппинг понятных цветов на внутренние темы
@@ -69,13 +69,13 @@ def _insta_setup_summary(data: dict) -> str:
     rewrite_label = INSTA_REWRITE_LABELS.get(rewrite_style, "Короче")
 
     return (
-        "🚀 Insta Auto\n\n"
+        "Карусель\n\n"
         "Настройте 3 параметра и отправьте текст:\n\n"
-        f"📰 Стиль: {style_label}\n"
-        f"🌈 Цвета: {color_label} — {color_desc}\n"
-        f"✍️ Текст: {rewrite_label}\n"
-        f"{'📎 Свой фон загружен' if custom_bg else ''}\n"
-        f"📐 Размер: {INSTA_CARD_SIZE_LABEL}"
+        f"Стиль: {style_label}\n"
+        f"Палитра: {color_label} — {color_desc}\n"
+        f"Текст: {rewrite_label}\n"
+        f"{'Фон: свой загружен\n' if custom_bg else ''}"
+        f"Размер: {INSTA_CARD_SIZE_LABEL}"
     )
 
 
@@ -90,7 +90,7 @@ def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarku
         return [InlineKeyboardButton(text=title, callback_data="insta_noop")]
 
     # Стиль
-    style_rows = [section("📰 СТИЛЬ СЛАЙДОВ")]
+    style_rows = [section("Стиль")]
     style_btns = []
     for key in ("auto", "magazine", "terminal", "poster", "carddeck"):
         label = LAYOUT_STYLE_LABELS.get(key, "Авто")
@@ -100,7 +100,7 @@ def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarku
     style_rows.extend([style_btns[:3], style_btns[3:]])
 
     # Цвета
-    color_rows = [section("🌈 ЦВЕТОВАЯ ПАЛИТРА")]
+    color_rows = [section("Палитра")]
     color_btns = []
     for key in ("auto", "dark", "light", "warm", "bold"):
         label = INSTA_COLOR_LABELS[key]
@@ -110,7 +110,7 @@ def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarku
     color_rows.extend([color_btns[:3], color_btns[3:]])
 
     # Текст
-    text_rows = [section("✍️ ПОДАЧА ТЕКСТА")]
+    text_rows = [section("Текст")]
     text_btns = []
     for key in ("exact", "concise", "educational", "marketing"):
         label = INSTA_REWRITE_LABELS[key]
@@ -120,10 +120,10 @@ def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarku
     text_rows.extend([text_btns[:2], text_btns[2:]])
 
     # Дополнительно
-    custom_label = "✅ Свой фон" if custom_bg else "📎 Свой фон"
+    custom_label = "Свой фон: выбран" if custom_bg else "Загрузить свой фон"
     extra_rows = [
         [InlineKeyboardButton(text=custom_label, callback_data="insta_upload_bg")],
-        [InlineKeyboardButton(text="🔄 Сбросить настройки", callback_data="insta_reset_setup")],
+        [InlineKeyboardButton(text="Сбросить настройки", callback_data="insta_reset_setup")],
     ]
 
     return InlineKeyboardMarkup(

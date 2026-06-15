@@ -36,10 +36,10 @@ openrouter_fallback_client = (
 openai_fallback_client = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 LAYOUT_STYLE_PROMPTS = {
-    "magazine": "magazine: аналитика, эссе, разборы. Playfair Display или DM Serif Display, воздух, editorial rhythm, спокойная и умная композиция.",
+    "magazine": "magazine: аналитика, эссе, разборы. Cormorant Garamond или DM Serif Display в паре с Manrope. Воздух, editorial rhythm, спокойная и умная композиция.",
     "terminal": "terminal: технические обзоры, benchmarks, AI-новости. JetBrains Mono или IBM Plex Mono, CLI-эстетика, панели, прогресс, статусные строки.",
-    "poster": "poster: манифесты, анонсы, сильные утверждения. Unbounded или Space Grotesk, огромная типографика, цветовые блоки, жесткая композиция.",
-    "carddeck": "carddeck: списки, чеклисты, обучение. Inter или Manrope, стек карточек, glassmorphism, chips, dot progress.",
+    "poster": "poster: манифесты, анонсы, сильные утверждения. Sora или Space Grotesk в паре с Manrope, огромная типографика, цветовые блоки, жесткая композиция.",
+    "carddeck": "carddeck: списки, чеклисты, обучение. Manrope, аккуратный гротеск, стек карточек, glassmorphism, chips, dot progress.",
 }
 
 

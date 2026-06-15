@@ -123,10 +123,12 @@ FONT_MAP = {
 AI_FONT_QUERIES = {
     "inter": "Inter:wght@400;500;600;700;800",
     "playfair display": "Playfair+Display:wght@400;700;900",
+    "cormorant garamond": "Cormorant+Garamond:wght@400;500;600;700",
     "jetbrains mono": "JetBrains+Mono:wght@400;500;700;800",
     "unbounded": "Unbounded:wght@400;700;900",
     "manrope": "Manrope:wght@400;500;700;800",
     "space grotesk": "Space+Grotesk:wght@400;500;700",
+    "sora": "Sora:wght@400;600;700;800",
     "dm serif display": "DM+Serif+Display:ital@0;1",
 }
 

@@ -199,10 +199,10 @@ class CarouselPlan:
 
 
 LAYOUT_STYLE_LABELS = {
-    "magazine": "📰 Журнал",
-    "terminal": "💻 Терминал",
-    "poster": "🎯 Плакат",
-    "carddeck": "📇 Карточки",
+    "magazine": "Журнал",
+    "terminal": "Терминал",
+    "poster": "Плакат",
+    "carddeck": "Карточки",
 }
 
 LAYOUT_STYLE_DESCRIPTIONS = {
@@ -225,9 +225,9 @@ SLIDE_ARCHETYPES = {
 
 LAYOUT_STYLE_FONTS = {
     "magazine": {
-        "heading": "'Playfair Display', Georgia, 'Times New Roman', serif",
-        "body": "'Inter', system-ui, -apple-system, sans-serif",
-        "google": "Playfair+Display:wght@400;700;900|Inter:wght@400;500;600;700",
+        "heading": "'Cormorant Garamond', Georgia, 'Times New Roman', serif",
+        "body": "'Manrope', system-ui, -apple-system, sans-serif",
+        "google": "Cormorant+Garamond:wght@400;500;600;700|Manrope:wght@400;500;600;700;800",
     },
     "terminal": {
         "heading": "'JetBrains Mono', 'SFMono-Regular', 'Menlo', monospace",
@@ -235,14 +235,14 @@ LAYOUT_STYLE_FONTS = {
         "google": "JetBrains+Mono:wght@400;500;700;800",
     },
     "poster": {
-        "heading": "'Unbounded', 'Arial Black', sans-serif",
-        "body": "'Inter', system-ui, -apple-system, sans-serif",
-        "google": "Unbounded:wght@400;700;900|Inter:wght@400;500;600;700",
+        "heading": "'Sora', 'Space Grotesk', 'Arial Black', sans-serif",
+        "body": "'Manrope', system-ui, -apple-system, sans-serif",
+        "google": "Sora:wght@400;600;700;800|Manrope:wght@400;500;600;700;800",
     },
     "carddeck": {
-        "heading": "'Inter', system-ui, -apple-system, sans-serif",
-        "body": "'Inter', system-ui, -apple-system, sans-serif",
-        "google": "Inter:wght@400;500;600;700;800",
+        "heading": "'Manrope', system-ui, -apple-system, sans-serif",
+        "body": "'Manrope', system-ui, -apple-system, sans-serif",
+        "google": "Manrope:wght@400;500;600;700;800",
     },
 }
 

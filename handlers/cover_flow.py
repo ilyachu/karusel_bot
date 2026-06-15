@@ -112,7 +112,7 @@ async def cover_default_background_selected(callback: types.CallbackQuery, state
     await state.update_data(cover_background_data_url="")
     await state.set_state(CarouselFlow.cover_choosing_style)
     await callback.message.edit_text(
-        "Выберите стиль обложки:",
+        "Выберите конкретный стиль обложки.\n\nСначала идут группы, ниже под каждой группой — сами стили.",
         reply_markup=_style_keyboard(),
     )
 
@@ -158,7 +158,7 @@ async def cover_background_uploaded(message: types.Message, state: FSMContext, b
         await state.update_data(cover_background_data_url=data_url)
         await state.set_state(CarouselFlow.cover_choosing_style)
         await message.answer(
-            "Фон загружен. Теперь выберите стиль обложки:",
+            "Фон загружен. Теперь выберите конкретный стиль обложки.",
             reply_markup=_style_keyboard(),
         )
     except Exception as exc:
@@ -187,9 +187,9 @@ async def cover_format_selected(callback: types.CallbackQuery, state: FSMContext
 
 def _style_keyboard() -> InlineKeyboardMarkup:
     groups = [
-        ("Плакаты", ["orange_poster", "acid_poster", "red_manifesto", "blur_field"]),
-        ("Типографика", ["blue_type", "grid_steps", "paper_brief"]),
-        ("Атмосфера", ["retro_polaroid", "quiet_editorial", "chalk_notes"]),
+        ("Группа: плакатные", ["orange_poster", "acid_poster", "red_manifesto", "blur_field"]),
+        ("Группа: типографичные", ["blue_type", "grid_steps", "paper_brief"]),
+        ("Группа: атмосферные", ["retro_polaroid", "quiet_editorial", "chalk_notes"]),
     ]
     rows = []
     for group_name, styles in groups:
@@ -277,7 +277,7 @@ async def cover_change_style(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(CarouselFlow.cover_choosing_style)
     await callback.message.answer(
-        "Выберите другой стиль обложки:",
+        "Выберите другой конкретный стиль обложки:",
         reply_markup=_style_keyboard(),
     )
 
