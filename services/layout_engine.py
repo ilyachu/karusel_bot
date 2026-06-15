@@ -184,6 +184,7 @@ class SlidePlanEntry:
     theme_hint: str
     supporting_cards: list[dict] = field(default_factory=list)
     html_body: str = ""
+    archetype: str = ""
 
 
 @dataclass(frozen=True)
@@ -209,6 +210,17 @@ LAYOUT_STYLE_DESCRIPTIONS = {
     "terminal": "Хакерский моноширинный стиль. Для технических обзоров, бенчмарков, AI-новостей.",
     "poster": "Яркий плакатный стиль. Для манифестов, анонсов, сильных утверждений.",
     "carddeck": "Чистый карточный стиль. Для списков, чеклистов, образовательного контента.",
+}
+
+SLIDE_ARCHETYPES = {
+    "hero_center",
+    "split_story",
+    "checklist_stack",
+    "stat_panel",
+    "quote_poster",
+    "timeline_steps",
+    "comparison_grid",
+    "soft_cta",
 }
 
 LAYOUT_STYLE_FONTS = {
@@ -261,6 +273,7 @@ class LayoutSpec:
     progress_style: str = "pill"
     supporting_cards: list[dict] = field(default_factory=list)
     html_body: str = ""
+    archetype: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -385,6 +398,7 @@ def _build_classic_layout_specs(plan: CarouselPlan, layout_style: str = "magazin
                 layout_style=layout_style,
                 supporting_cards=supporting_cards,
                 html_body=slide.html_body,
+                archetype=slide.archetype or _infer_archetype(slide.role, variant),
             )
         )
     return specs
@@ -424,6 +438,7 @@ def _build_editorial_layout_specs(plan: CarouselPlan, layout_style: str = "magaz
                 progress_style="line",
                 supporting_cards=_build_editorial_supporting_cards(slide, variant),
                 html_body=slide.html_body,
+                archetype=slide.archetype or _infer_archetype(slide.role, variant),
             )
         )
     return specs
@@ -462,6 +477,7 @@ def _build_brief_layout_specs(plan: CarouselPlan, layout_style: str = "magazine"
                 progress_style="line",
                 supporting_cards=_build_brief_supporting_cards(slide, variant),
                 html_body=slide.html_body,
+                archetype=slide.archetype or _infer_archetype(slide.role, variant),
             )
         )
     return specs
@@ -502,6 +518,7 @@ def _build_data_layout_specs(plan: CarouselPlan, layout_style: str = "magazine")
                 progress_style="line",
                 supporting_cards=supporting_cards,
                 html_body=slide.html_body,
+                archetype=slide.archetype or _infer_archetype(slide.role, variant),
             )
         )
     return specs
@@ -599,6 +616,7 @@ def parse_carousel_plan(raw_plan: dict) -> CarouselPlan:
                 theme_hint=str(slide.get("theme_hint", raw_plan.get("carousel", {}).get("theme_hint", "business_dark"))),
                 supporting_cards=_normalize_supporting_cards(slide.get("supporting_cards")),
                 html_body=str(slide.get("html_body", "")).strip(),
+                archetype=_normalize_archetype(str(slide.get("archetype", ""))),
             )
         )
 
@@ -643,6 +661,7 @@ def build_fallback_instagram_plan(slides_content: list[dict], theme_hint: str = 
                 theme_hint=theme_hint,
                 supporting_cards=_normalize_supporting_cards(slide.get("supporting_cards")),
                 html_body=str(slide.get("html_body", "")).strip(),
+                archetype=_normalize_archetype(str(slide.get("archetype", ""))),
             )
         )
 
@@ -672,6 +691,31 @@ def _choose_variant(role: str, density: str, index: int, total_slides: int) -> s
     if density == "low":
         return "spotlight"
     return "editorial"
+
+
+def _normalize_archetype(value: str) -> str:
+    normalized = (value or "").strip()
+    if normalized in SLIDE_ARCHETYPES:
+        return normalized
+    return ""
+
+
+def _infer_archetype(role: str, variant: str) -> str:
+    if role == "hook":
+        return "hero_center"
+    if role == "cta":
+        return "soft_cta"
+    if role == "checklist":
+        return "checklist_stack"
+    if role == "proof" or variant in {"stat_focus", "data_stat", "editorial_stat"}:
+        return "stat_panel"
+    if role == "example":
+        return "comparison_grid"
+    if role == "context":
+        return "split_story"
+    if variant in {"quote", "spotlight"}:
+        return "quote_poster"
+    return "timeline_steps"
 
 
 def _choose_editorial_variant(slide: SlidePlanEntry, total_slides: int) -> str:

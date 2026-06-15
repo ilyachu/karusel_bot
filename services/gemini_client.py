@@ -13,6 +13,9 @@ from config import (
     NEURALDEEP_MODEL,
     OPENAI_API_KEY,
     OPENAI_FALLBACK_MODEL,
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL,
+    OPENROUTER_MODEL,
 )
 
 if NEURALDEEP_API_KEY:
@@ -25,6 +28,11 @@ else:
     llm_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
     DEFAULT_MODEL = OPENAI_FALLBACK_MODEL
 
+openrouter_fallback_client = (
+    AsyncOpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
+    if OPENROUTER_API_KEY
+    else None
+)
 openai_fallback_client = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 LAYOUT_STYLE_PROMPTS = {
@@ -170,6 +178,11 @@ async def generate_instagram_carousel_plan(
     base_text: str,
     target_slides_count: int,
     rewrite_style: str = "concise",
+    *,
+    layout_style_override: str = "auto",
+    theme_hint_override: str = "auto",
+    color_palette: str = "auto",
+    visual_mode: str = "auto",
 ) -> dict:
     style_instructions = {
         "exact": "бережно сохраняй исходные мысли и формулировки, только упакуй их в слайды",
@@ -179,8 +192,14 @@ async def generate_instagram_carousel_plan(
     }
     style_instruction = style_instructions.get(rewrite_style, style_instructions["concise"])
 
+    settings_block = _build_user_settings_block(
+        layout_style_override=layout_style_override,
+        theme_hint_override=theme_hint_override,
+        color_palette=color_palette,
+        visual_mode=visual_mode,
+    )
     prompt = f"""Собери JSON-план карусели из {target_slides_count} слайдов:
-{{"carousel": {{"goal": "instagram_carousel", "audience": "...", "tone": "clear_confident|bold_creator|premium_editorial", "theme_hint": "business_dark|minimal_light|creator_bold|editorial_premium|memory_archive|founder_brief|growth_black|research_mono", "cta": "save_and_follow|comment_and_dm|share_and_follow", "layout_style": "magazine|terminal|poster|carddeck"}}, "slides": [{{"index": 1, "role": "hook|context|point|proof|example|checklist|cta", "title": "...", "body": "...", "emphasis": ["..."], "supporting_cards": [{{"title": "1-2 слова", "body": "до 6 слов"}}], "density": "low|medium|high", "theme_hint": "..."}}]}}
+{{"carousel": {{"goal": "instagram_carousel", "audience": "...", "tone": "clear_confident|bold_creator|premium_editorial", "theme_hint": "business_dark|minimal_light|creator_bold|editorial_premium|memory_archive|founder_brief|growth_black|research_mono", "cta": "save_and_follow|comment_and_dm|share_and_follow", "layout_style": "magazine|terminal|poster|carddeck"}}, "slides": [{{"index": 1, "role": "hook|context|point|proof|example|checklist|cta", "title": "...", "body": "...", "emphasis": ["..."], "supporting_cards": [{{"title": "1-2 слова", "body": "до 6 слов"}}], "density": "low|medium|high", "theme_hint": "...", "archetype": "hero_center|split_story|checklist_stack|stat_panel|quote_poster|timeline_steps|comparison_grid|soft_cta"}}]}}
 
 Правила: hook первый, cta последний. {style_instruction}. supporting_cards — 0-3 микро-тезиса, не копировать body.
 Выбери layout_style строго по контексту:
@@ -189,6 +208,16 @@ async def generate_instagram_carousel_plan(
 - poster: манифесты, анонсы, резкие тезисы, сильные заявления
 - carddeck: списки, чеклисты, образовательный контент, how-to
 Не выбирай случайно: layout_style должен помогать именно этому материалу.
+Для каждого слайда выбери archetype:
+- hero_center: мощный центральный hook
+- split_story: верх/низ или левый/правый narrative split
+- checklist_stack: список или ступени
+- stat_panel: цифра + факт + подпорка
+- quote_poster: короткий тезис с большим воздухом
+- timeline_steps: 2-4 последовательных шага
+- comparison_grid: сравнение или пример/антипример
+- soft_cta: спокойный финальный CTA
+{settings_block}
 
 Текст:
 {base_text}"""
@@ -219,6 +248,7 @@ async def attach_slide_html_to_plan(base_text: str, plan: dict) -> dict:
 
     layout_style = str(plan.get("carousel", {}).get("layout_style", "magazine"))
     style_brief = LAYOUT_STYLE_PROMPTS.get(layout_style, LAYOUT_STYLE_PROMPTS["magazine"])
+    texture_preset = _texture_preset_for_theme(str(plan.get("carousel", {}).get("theme_hint", "business_dark")))
     payload = {
         "carousel": deepcopy(plan.get("carousel", {})),
         "slides": [
@@ -229,6 +259,7 @@ async def attach_slide_html_to_plan(base_text: str, plan: dict) -> dict:
                 "body": slide.get("body", ""),
                 "emphasis": slide.get("emphasis", []),
                 "supporting_cards": slide.get("supporting_cards", []),
+                "archetype": slide.get("archetype", ""),
             }
             for idx, slide in enumerate(slides)
         ],
@@ -239,6 +270,7 @@ async def attach_slide_html_to_plan(base_text: str, plan: dict) -> dict:
 
 Нужно придумать уникальный body-level HTML для каждого слайда.
 Стиль: {style_brief}
+Texture layer: {texture_preset}
 
 Требования:
 - Только body-level HTML, без <html>, <head>, <body>
@@ -248,6 +280,7 @@ async def attach_slide_html_to_plan(base_text: str, plan: dict) -> dict:
 - Не используй script, canvas, svg data uri, внешние картинки
 - Можно использовать Google Fonts по family name: Inter, Playfair Display, JetBrains Mono, Unbounded, Manrope, Space Grotesk, DM Serif Display
 - Текст бери только из данных слайда, не выдумывай новые факты
+- Уважай archetype каждого слайда, это не подсказка, а композиционное требование
 - Не складывай весь текст в верхние 25% холста
 - Строй композицию по вертикали: верхний маркер/лейбл, главный блок в центре или средней зоне, поддержка/CTA внизу
 - Оставляй заметный воздух: минимум 18% пустого пространства на слайде
@@ -292,12 +325,14 @@ async def generate_cover_html_body(base_text: str, style: str, format_key: str, 
         "quiet_editorial": "тихий журнал, serif, много воздуха",
         "chalk_notes": "маркерные заметки, ручной наклон, бумага",
     }.get(style, "типографическая обложка")
+    texture_preset = _texture_preset_for_cover_style(style)
     prompt = f"""Верни JSON:
 {{"html_body":"<section style='...'>...</section>"}}
 
 Ты делаешь уникальную HTML-обложку.
 Стиль: {style_brief}
 Формат: {format_key}
+Texture layer: {texture_preset}
 
 Требования:
 - Только body-level HTML, без <html>, <head>, <body>
@@ -378,35 +413,59 @@ async def _router_text_request(prompt: str) -> str:
 
 
 async def _openai_json_request(prompt: str) -> dict:
-    if not openai_fallback_client:
-        raise RuntimeError("OPENAI_API_KEY is not configured for fallback requests.")
+    clients: list[tuple[str, AsyncOpenAI, str]] = []
+    if openrouter_fallback_client:
+        clients.append(("openrouter", openrouter_fallback_client, OPENROUTER_MODEL))
+    if openai_fallback_client:
+        clients.append(("openai", openai_fallback_client, OPENAI_FALLBACK_MODEL))
+    if not clients:
+        raise RuntimeError("No fallback LLM client configured.")
 
-    response = await openai_fallback_client.chat.completions.create(
-        model=OPENAI_FALLBACK_MODEL,
-        messages=[
-            {"role": "system", "content": "Return valid JSON only. No markdown fences, no explanation."},
-            {"role": "user", "content": prompt},
-        ],
-        response_format={"type": "json_object"},
-        max_tokens=4096,
-    )
-    content = response.choices[0].message.content or "{}"
-    return json.loads(content)
+    last_error: Exception | None = None
+    for name, client, model in clients:
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "Return valid JSON only. No markdown fences, no explanation."},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=4096,
+            )
+            content = response.choices[0].message.content or "{}"
+            return json.loads(content)
+        except Exception as exc:
+            logging.error("JSON fallback failed via %s: %s", name, exc)
+            last_error = exc
+    raise RuntimeError(f"All JSON fallback clients failed: {last_error}")
 
 
 async def _openai_text_request(prompt: str) -> str:
-    if not openai_fallback_client:
-        raise RuntimeError("OPENAI_API_KEY is not configured for fallback requests.")
+    clients: list[tuple[str, AsyncOpenAI, str]] = []
+    if openrouter_fallback_client:
+        clients.append(("openrouter", openrouter_fallback_client, OPENROUTER_MODEL))
+    if openai_fallback_client:
+        clients.append(("openai", openai_fallback_client, OPENAI_FALLBACK_MODEL))
+    if not clients:
+        raise RuntimeError("No fallback LLM client configured.")
 
-    response = await openai_fallback_client.chat.completions.create(
-        model=OPENAI_FALLBACK_MODEL,
-        messages=[
-            {"role": "system", "content": "Write concise Russian editorial/social copy without marketing fluff."},
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=4096,
-    )
-    return (response.choices[0].message.content or "").strip()
+    last_error: Exception | None = None
+    for name, client, model in clients:
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "Write concise Russian editorial/social copy without marketing fluff."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=4096,
+            )
+            return (response.choices[0].message.content or "").strip()
+        except Exception as exc:
+            logging.error("Text fallback failed via %s: %s", name, exc)
+            last_error = exc
+    raise RuntimeError(f"All text fallback clients failed: {last_error}")
 
 
 def _is_russian_source(text: str) -> bool:
@@ -528,6 +587,57 @@ def _preview_text(value: str, limit: int = 180) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[:limit] + "..."
+
+
+def _build_user_settings_block(
+    *,
+    layout_style_override: str,
+    theme_hint_override: str,
+    color_palette: str,
+    visual_mode: str,
+) -> str:
+    notes: list[str] = []
+    if layout_style_override and layout_style_override != "auto":
+        notes.append(f"- Пользователь зафиксировал layout_style = {layout_style_override}. Не меняй его.")
+    if theme_hint_override and theme_hint_override != "auto":
+        notes.append(f"- Пользователь зафиксировал theme_hint = {theme_hint_override}. Соблюдай эту палитру и настроение.")
+    if color_palette and color_palette != "auto":
+        notes.append(f"- Пользователь выбрал цветовой режим = {color_palette}. Не уходи в случайную палитру.")
+    if visual_mode and visual_mode != "auto":
+        notes.append(f"- Пользователь выбрал visual_mode = {visual_mode}. Подчини композицию этому режиму.")
+    if not notes:
+        return "- Пользовательские визуальные настройки не зафиксированы. Можешь выбирать сам."
+    return "\n".join(notes)
+
+
+def _texture_preset_for_theme(theme_hint: str) -> str:
+    presets = {
+        "growth_black": "midnight_noise_scanlines",
+        "business_dark": "blueprint_grid_noise",
+        "minimal_light": "soft_paper_grain",
+        "founder_brief": "clean_paper_folds",
+        "memory_archive": "editorial_film_grain",
+        "creator_bold": "vibrant_halftone_glow",
+        "editorial_premium": "premium_canvas_dust",
+        "research_mono": "mono_terminal_scanlines",
+    }
+    return presets.get(theme_hint, "soft_paper_grain")
+
+
+def _texture_preset_for_cover_style(style: str) -> str:
+    presets = {
+        "orange_poster": "poster_paper_noise",
+        "acid_poster": "acid_halftone",
+        "retro_polaroid": "film_dust_burn",
+        "blue_type": "clean_ink_paper",
+        "grid_steps": "blueprint_grid",
+        "blur_field": "motion_blur_bloom",
+        "red_manifesto": "newsprint_rough",
+        "paper_brief": "office_paper_fold",
+        "quiet_editorial": "editorial_grain",
+        "chalk_notes": "marker_paper_texture",
+    }
+    return presets.get(style, "editorial_grain")
 
 
 def _sanitize_threads_summary(text: str) -> str:

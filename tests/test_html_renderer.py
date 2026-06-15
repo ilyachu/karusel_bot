@@ -152,6 +152,7 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertIn("Manrope", html)
         self.assertIn("justify-content: space-between", html)
         self.assertIn("min-height: 100%", html)
+        self.assertIn("ai-texture", html)
         self.assertNotIn("Шаблонный заголовок", html)
 
     def test_build_slide_html_falls_back_when_ai_html_body_missing_markup(self):

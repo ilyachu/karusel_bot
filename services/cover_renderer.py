@@ -1031,6 +1031,7 @@ def _build_ai_cover_html(plan: CoverPlan) -> str:
     width = fmt["width"]
     height = fmt["height"]
     imports = _google_font_imports_for_html(html_body)
+    texture_css = _texture_css_for_cover(plan.style)
     fonts_block = f'<link href="https://fonts.googleapis.com/css2?{imports}&display=swap" rel="stylesheet">' if imports else ""
     safe_bg = _safe_background_data_url(plan.background_data_url)
     background_markup = (
@@ -1064,7 +1065,8 @@ def _build_ai_cover_html(plan: CoverPlan) -> str:
       inset: 0;
       background: linear-gradient(180deg, rgba(244, 241, 232, 0.12), rgba(244, 241, 232, 0.22));
     }}
-    .ai-stage {{ position: relative; z-index: 1; width: {width}px; height: {height}px; }}
+    .ai-texture {{ position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0.24; {texture_css} }}
+    .ai-stage {{ position: relative; z-index: 2; width: {width}px; height: {height}px; }}
     .ai-stage > * {{
       width: 100%;
       min-height: 100%;
@@ -1077,6 +1079,7 @@ def _build_ai_cover_html(plan: CoverPlan) -> str:
 </head>
 <body>
   {background_markup}
+  <div class="ai-texture"></div>
   <div class="ai-stage">{html_body}</div>
 </body>
 </html>"""
@@ -1114,6 +1117,22 @@ def _extract_font_families(html_body: str) -> list[str]:
             if clean:
                 families.append(clean)
     return families
+
+
+def _texture_css_for_cover(style: str) -> str:
+    textures = {
+        "orange_poster": "background-image: radial-gradient(circle at 15% 20%, rgba(7,8,11,0.10), transparent 18%), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 100% 100%, 30px 30px;",
+        "acid_poster": "background-image: radial-gradient(circle at 20% 30%, rgba(7,16,6,0.12), transparent 16%), radial-gradient(circle at 80% 70%, rgba(7,16,6,0.08), transparent 18%);",
+        "retro_polaroid": "background-image: radial-gradient(circle at 10% 10%, rgba(255,242,211,0.10), transparent 12%), radial-gradient(circle at 80% 70%, rgba(255,209,122,0.10), transparent 14%);",
+        "blue_type": "background-image: linear-gradient(rgba(16,72,255,0.06) 1px, transparent 1px); background-size: 100% 24px;",
+        "grid_steps": "background-image: linear-gradient(rgba(21,81,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(21,81,255,0.05) 1px, transparent 1px); background-size: 100% 28px, 28px 100%;",
+        "blur_field": "background-image: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.10), transparent 18%), radial-gradient(circle at 70% 60%, rgba(0,0,0,0.08), transparent 20%);",
+        "red_manifesto": "background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 100% 18px;",
+        "paper_brief": "background-image: linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px); background-size: 100% 26px;",
+        "quiet_editorial": "background-image: radial-gradient(circle, rgba(24,34,31,0.04) 1px, transparent 1px); background-size: 18px 18px;",
+        "chalk_notes": "background-image: radial-gradient(circle at 20% 20%, rgba(36,87,188,0.08), transparent 12%), radial-gradient(circle at 70% 60%, rgba(239,91,45,0.08), transparent 14%);",
+    }
+    return textures.get(style, textures["quiet_editorial"])
 
 
 def render_cover_html(plan: CoverPlan) -> bytes:

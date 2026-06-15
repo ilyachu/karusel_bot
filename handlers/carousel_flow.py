@@ -250,7 +250,15 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     word_count = len(text.split())
     target_slides = max(4, min(7, word_count // 15 + 2))
 
-    raw_plan = await generate_instagram_carousel_plan(text, target_slides, rewrite_style)
+    raw_plan = await generate_instagram_carousel_plan(
+        text,
+        target_slides,
+        rewrite_style,
+        layout_style_override=data.get("insta_layout_style", "auto"),
+        theme_hint_override=data.get("insta_theme_override", "auto"),
+        color_palette=data.get("insta_color_palette", "auto"),
+        visual_mode=data.get("insta_visual_mode", "auto"),
+    )
     if raw_plan:
         carousel_plan = parse_carousel_plan(raw_plan)
         slides_content = [

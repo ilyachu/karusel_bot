@@ -30,15 +30,18 @@ class GeminiClientTests(unittest.TestCase):
                         "title": "AI HTML",
                         "body": "body",
                         "html_body": "<div><h1>Unique</h1></div>",
+                        "archetype": "hero_center",
                     }
                 ],
             }
         )
 
         self.assertEqual(plan.slides[0].html_body, "<div><h1>Unique</h1></div>")
+        self.assertEqual(plan.slides[0].archetype, "hero_center")
 
         spec = build_instagram_layout_specs(plan, layout_style="magazine")[0]
         self.assertEqual(spec.html_body, "<div><h1>Unique</h1></div>")
+        self.assertEqual(spec.archetype, "hero_center")
 
 
 if __name__ == "__main__":

@@ -137,6 +137,7 @@ def _build_ai_slide_html(spec: LayoutSpec, custom_background_data_url: str = "")
         return ""
 
     imports = _google_font_imports_for_html(getattr(spec, "layout_style", "magazine"), html_body)
+    texture_css = _texture_css_for_slide(getattr(spec, "theme", "business_dark"))
     fonts_block = f'<link href="https://fonts.googleapis.com/css2?{imports}&display=swap" rel="stylesheet">' if imports else ""
     safe_bg = _safe_data_image_url(custom_background_data_url)
     background_markup = (
@@ -173,7 +174,8 @@ def _build_ai_slide_html(spec: LayoutSpec, custom_background_data_url: str = "")
     html, body {{ margin: 0; width: 1080px; height: 1350px; overflow: hidden; }}
     body {{ position: relative; background: #0b1020; }}
     {background_css}
-    .ai-stage {{ position: relative; z-index: 1; width: 1080px; height: 1350px; }}
+    .ai-texture {{ position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0.24; {texture_css} }}
+    .ai-stage {{ position: relative; z-index: 2; width: 1080px; height: 1350px; }}
     .ai-stage > * {{
       width: 100%;
       min-height: 100%;
@@ -186,6 +188,7 @@ def _build_ai_slide_html(spec: LayoutSpec, custom_background_data_url: str = "")
 </head>
 <body>
   {background_markup}
+  <div class="ai-texture"></div>
   <div class="ai-stage">{html_body}</div>
 </body>
 </html>"""
@@ -228,6 +231,20 @@ def _extract_font_families(html_body: str) -> list[str]:
             if clean:
                 families.append(clean)
     return families
+
+
+def _texture_css_for_slide(theme: str) -> str:
+    textures = {
+        "growth_black": "background-image: linear-gradient(rgba(190,242,100,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 100% 6px, 28px 28px;",
+        "business_dark": "background-image: radial-gradient(circle at 20% 20%, rgba(56,189,248,0.18), transparent 18%), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px); background-size: 100% 100%, 32px 32px;",
+        "minimal_light": "background-image: radial-gradient(circle, rgba(15,23,42,0.05) 1px, transparent 1px); background-size: 18px 18px;",
+        "founder_brief": "background-image: linear-gradient(rgba(3,105,161,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(3,105,161,0.04) 1px, transparent 1px); background-size: 100% 28px, 28px 100%;",
+        "memory_archive": "background-image: radial-gradient(circle at 10% 20%, rgba(61,44,29,0.08), transparent 16%), radial-gradient(circle at 80% 70%, rgba(164,106,63,0.08), transparent 18%);",
+        "creator_bold": "background-image: radial-gradient(circle at 15% 20%, rgba(244,114,182,0.18), transparent 18%), radial-gradient(circle at 85% 30%, rgba(99,102,241,0.18), transparent 20%);",
+        "editorial_premium": "background-image: linear-gradient(135deg, rgba(245,158,11,0.08), transparent 32%), radial-gradient(circle at 80% 15%, rgba(255,251,235,0.08), transparent 14%);",
+        "research_mono": "background-image: linear-gradient(rgba(17,24,39,0.05) 1px, transparent 1px); background-size: 100% 5px;",
+    }
+    return textures.get(theme, textures["business_dark"])
 
 
 # ═══════════════════════════════════════════════════════════════
