@@ -181,8 +181,12 @@ Claude пишет: уникальный HTML/CSS для каждого слай�
 
 ```bash
 # Локально -> сервер
-rsync -avz handlers/common.py root@5.253.188.164:/root/karusel_bot_v2/
-rsync -avz services/gemini_client.py root@5.253.188.164:/root/karusel_bot_v2/
+# Важно: не использовать trailing slash у папок handlers/ services/
+# Иначе rsync разложит содержимое в корень проекта и можно получить смесь старых/новых модулей.
+rsync -avz handlers services tests utils middlewares assets main.py config.py requirements.txt Dockerfile docker-compose.yml README.md DEPLOY.md root@5.253.188.164:/root/karusel_bot_v2/
+
+# Или безопасный скрипт
+DEPLOY_SERVER_PASSWORD='<REDACTED>' ./scripts/deploy_server.sh
 
 # Пересобрать на сервере
 ssh root@5.253.188.164 'cd /root/karusel_bot_v2 && docker compose down bot && docker compose up -d --build bot'

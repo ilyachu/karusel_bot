@@ -32,6 +32,27 @@ Upload the following files/folders to a folder on your server (e.g., `/opt/karus
 
 **Do NOT upload `.env` or `bot_database.db` if you want a fresh start, but you DO need to create a `.env` file on the server.**
 
+### Safe rsync
+Do not use `rsync handlers/ services/ ...` with trailing slashes when target is project root. That copies folder contents into root and can leave mixed old/new modules on server.
+
+Use folder names without trailing slash:
+```bash
+rsync -avz \
+  handlers \
+  services \
+  tests \
+  utils \
+  middlewares \
+  assets \
+  main.py config.py requirements.txt Dockerfile docker-compose.yml README.md DEPLOY.md \
+  root@5.253.188.164:/root/karusel_bot_v2/
+```
+
+Or run bundled script:
+```bash
+DEPLOY_SERVER_PASSWORD='your_password' ./scripts/deploy_server.sh
+```
+
 ## Step 2.5: Prepare Data Directory
 Before starting Docker, create the data directory to store the database and logs:
 ```bash

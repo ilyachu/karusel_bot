@@ -225,20 +225,42 @@ async def generate_instagram_carousel_plan(
     try:
         result = await _router_json_request(prompt)
         result = await _normalize_carousel_plan_language(base_text, result)
-        return await attach_slide_html_to_plan(base_text, result)
+        return await attach_slide_html_to_plan(
+            base_text,
+            result,
+            layout_style_override=layout_style_override,
+            theme_hint_override=theme_hint_override,
+            color_palette=color_palette,
+            visual_mode=visual_mode,
+        )
     except Exception as e:
         logging.error(f"Error in generate_instagram_carousel_plan: {e}")
 
     try:
         result = await _openai_json_request(prompt)
         result = await _normalize_carousel_plan_language(base_text, result)
-        return await attach_slide_html_to_plan(base_text, result)
+        return await attach_slide_html_to_plan(
+            base_text,
+            result,
+            layout_style_override=layout_style_override,
+            theme_hint_override=theme_hint_override,
+            color_palette=color_palette,
+            visual_mode=visual_mode,
+        )
     except Exception as fallback_error:
         logging.error(f"OpenAI fallback failed in generate_instagram_carousel_plan: {fallback_error}")
         return {}
 
 
-async def attach_slide_html_to_plan(base_text: str, plan: dict) -> dict:
+async def attach_slide_html_to_plan(
+    base_text: str,
+    plan: dict,
+    *,
+    layout_style_override: str = "auto",
+    theme_hint_override: str = "auto",
+    color_palette: str = "auto",
+    visual_mode: str = "auto",
+) -> dict:
     if not isinstance(plan, dict) or not isinstance(plan.get("slides"), list):
         return plan
 
@@ -264,6 +286,12 @@ async def attach_slide_html_to_plan(base_text: str, plan: dict) -> dict:
             for idx, slide in enumerate(slides)
         ],
     }
+    settings_block = _build_user_settings_block(
+        layout_style_override=layout_style_override,
+        theme_hint_override=theme_hint_override,
+        color_palette=color_palette,
+        visual_mode=visual_mode,
+    )
     prompt = f"""Ты — арт-директор Instagram-каруселей.
 Верни JSON:
 {{"slides":[{{"index":1,"html_body":"<section style='...'>...</section>"}}]}}
@@ -287,6 +315,7 @@ Texture layer: {texture_preset}
 - Длина строк должна быть читабельной: не делай длинные абзацы на всю ширину
 - Для role=hook и role=cta главный текст размещай в центре или нижней трети
 - Для role=checklist, role=proof, role=example используй 2-3 зоны, карточки или split-layout, чтобы взгляд шёл сверху вниз
+{settings_block}
 
 Исходный текст:
 {base_text}

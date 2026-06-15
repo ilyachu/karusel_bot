@@ -40,6 +40,7 @@ from utils.database import (
 )
 
 from services.gemini_client import (
+    attach_slide_html_to_plan,
     generate_final_slides,
     generate_instagram_carousel_plan,
     generate_instagram_caption,
@@ -56,6 +57,11 @@ from services.layout_engine import (
     enforce_default_cta_slide,
     parse_carousel_plan,
     resolve_visual_mode,
+)
+from services.background_registry import (
+    load_background_preset_buffer,
+    load_background_preset_data_url,
+    pick_background_preset,
 )
 from services.html_renderer import render_layout_spec_html
 from services.cover_renderer import image_bytes_to_data_url
@@ -295,6 +301,21 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         from dataclasses import replace
         carousel_plan = replace(carousel_plan, layout_style=layout_style)
     visual_decision = resolve_visual_mode(carousel_plan, visual_mode)
+    refreshed_raw_plan = await attach_slide_html_to_plan(
+        text,
+        {"carousel": asdict(carousel_plan), "slides": [asdict(slide) for slide in carousel_plan.slides]},
+        layout_style_override=layout_style,
+        theme_hint_override=carousel_plan.theme_hint,
+        color_palette=data.get("insta_color_palette", "auto"),
+        visual_mode=visual_decision.resolved_mode,
+    )
+    refreshed_plan = parse_carousel_plan(refreshed_raw_plan)
+    from dataclasses import replace
+    carousel_plan = replace(
+        carousel_plan,
+        slides=refreshed_plan.slides,
+        layout_style=layout_style,
+    )
 
     await status.edit_text("✍️ Генерирую подпись...")
     caption = await generate_instagram_caption(text, slides_content)
@@ -311,7 +332,18 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     media_group = []
     render_mode = "html"
     fallback_reason = ""
+    preset_background_ids: list[str] = []
     for layout_spec in layout_specs:
+        preset = None if custom_bg_bytes else pick_background_preset(
+            layout_style=layout_spec.layout_style,
+            theme_hint=layout_spec.theme,
+            slide_role=layout_spec.role,
+            archetype=getattr(layout_spec, "archetype", ""),
+        )
+        preset_background_data_url = load_background_preset_data_url(preset.preset_id) if preset else ""
+        preset_background_buffer = load_background_preset_buffer(preset.preset_id) if preset else None
+        if preset:
+            preset_background_ids.append(preset.preset_id)
         if custom_bg_bytes:
             logging.info(f"Rendering slide {layout_spec.slide_index} with custom background")
             try:
@@ -339,6 +371,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
                     render_layout_spec_html,
                     layout_spec,
                     user_logo,
+                    preset_background_data_url,
                 )
             except Exception as exc:
                 logging.warning("HTML renderer unavailable, falling back to Pillow: %s", exc)
@@ -347,7 +380,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
                 image_buffer = render_layout_spec(
                     layout_spec,
                     logo_text=user_logo,
-                    bg_source=None,
+                    bg_source=preset_background_buffer,
                 )
                 rendered_bytes = image_buffer.getvalue()
         rendered_buffers.append(BytesIO(rendered_bytes))
@@ -375,6 +408,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             "visual_decision": visual_decision.to_dict(),
             "rewrite_style": rewrite_style,
             "custom_background": bool(custom_bg_bytes),
+            "preset_background_ids": preset_background_ids,
             "threads_summary": threads_summary,
             "fallback_reason": fallback_reason,
         },
