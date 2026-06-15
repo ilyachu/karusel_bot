@@ -48,6 +48,23 @@ class CoverRendererTests(unittest.TestCase):
                 self.assertIn("&lt;От git push до прода&gt;", html)
                 self.assertIn("chu_il", html)
 
+    def test_build_cover_html_uses_plan_footer_right(self):
+        plan = CoverPlan(
+            headline="Логотип",
+            subtitle="Пользовательский footer",
+            eyebrow_left="TEST",
+            eyebrow_right="LOGO",
+            footer_left="ДЛЯ ОБЛОЖКИ",
+            footer_right="client brand",
+            symbol="dot",
+            style="orange_poster",
+            format_key="post",
+        )
+
+        html = build_cover_html(plan)
+
+        self.assertIn("client brand", html)
+
     def test_retro_polaroid_contains_film_burn_structure(self):
         plan = CoverPlan(
             headline="ретро запуск",

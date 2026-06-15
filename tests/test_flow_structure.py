@@ -153,6 +153,15 @@ class FlowStructureTests(unittest.TestCase):
         self.assertIn("@router.message(Settings.waiting_for_logo, F.text)", source)
         self.assertIn("async def settings_logo_wrong_input", source)
 
+    def test_cover_flow_uses_user_logo(self):
+        source = (PROJECT_ROOT / "handlers" / "cover_flow.py").read_text(encoding="utf-8")
+
+        self.assertIn("from utils.database import get_user_logo", source)
+        self.assertIn("_resolve_user_logo_for_cover_event", source)
+        self.assertIn('raw_plan["footer_right"] = user_logo', source)
+        self.assertIn("Автор: {plan.footer_right}", source)
+        self.assertNotIn("Автор: chu_il", source)
+
     def test_custom_background_disables_ai_html_renderer(self):
         source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
 

@@ -199,7 +199,7 @@ def build_cover_html(plan: CoverPlan) -> str:
     eyebrow_left = html.escape(plan.eyebrow_left)
     eyebrow_right = html.escape(plan.eyebrow_right)
     footer_left = html.escape(plan.footer_left)
-    footer_right = html.escape(COVER_AUTHOR)
+    footer_right = html.escape(plan.footer_right or COVER_AUTHOR)
     style_class = style_tokens["class"]
     is_retro = plan.style == "retro_polaroid"
     custom_background = _safe_background_data_url(plan.background_data_url)

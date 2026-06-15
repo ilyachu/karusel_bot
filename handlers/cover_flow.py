@@ -14,11 +14,17 @@ from services.cover_renderer import (
     render_cover_html,
 )
 from services.gemini_client import generate_cover_plan
+from utils.database import get_user_logo
 from utils.states import CarouselFlow
 from utils.validation import validate_file_size, validate_text_length
 
 
 router = Router()
+
+
+def _resolve_user_logo_for_cover_event(event: types.Message | types.CallbackQuery) -> str:
+    user_id = event.from_user.id if event.from_user else 0
+    return get_user_logo(user_id)
 
 
 @router.callback_query(F.data == "cover_noop")
@@ -72,8 +78,10 @@ async def cover_style_selected(callback: types.CallbackQuery, state: FSMContext)
     status = await callback.message.answer("🎨 Собираю обложку...")
 
     try:
+        user_logo = _resolve_user_logo_for_cover_event(callback)
         raw_plan = await generate_cover_plan(base_text, style, format_key)
         raw_plan["background_data_url"] = background_data_url
+        raw_plan["footer_right"] = user_logo
         plan = CoverPlan(**raw_plan)
         rendered_bytes = await asyncio.to_thread(render_cover_html, plan)
     except Exception as exc:
@@ -99,7 +107,7 @@ async def cover_style_selected(callback: types.CallbackQuery, state: FSMContext)
             f"Стиль: {COVER_STYLES[plan.style]['label']}\n"
             f"Формат: {COVER_FORMATS[plan.format_key]['label']}\n"
             f"Фон: {'свой' if plan.background_data_url else 'стандартный'}\n"
-            "Автор: chu_il"
+            f"Автор: {plan.footer_right}"
         ),
         reply_markup=kb,
     )
@@ -237,8 +245,10 @@ async def cover_regenerate(callback: types.CallbackQuery, state: FSMContext):
     status = await callback.message.answer("🎨 Генерирую другой вариант...")
 
     try:
+        user_logo = _resolve_user_logo_for_cover_event(callback)
         raw_plan = await generate_cover_plan(base_text, style, format_key)
         raw_plan["background_data_url"] = background_data_url
+        raw_plan["footer_right"] = user_logo
         plan = CoverPlan(**raw_plan)
         rendered_bytes = await asyncio.to_thread(render_cover_html, plan)
     except Exception as exc:
@@ -265,7 +275,7 @@ async def cover_regenerate(callback: types.CallbackQuery, state: FSMContext):
             f"Стиль: {COVER_STYLES[plan.style]['label']}\n"
             f"Формат: {COVER_FORMATS[plan.format_key]['label']}\n"
             f"Фон: {'свой' if plan.background_data_url else 'стандартный'}\n"
-            "Автор: chu_il"
+            f"Автор: {plan.footer_right}"
         ),
         reply_markup=kb,
     )
