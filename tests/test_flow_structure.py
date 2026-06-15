@@ -1,6 +1,8 @@
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -118,6 +120,38 @@ class FlowStructureTests(unittest.TestCase):
 
         self.assertIn("Шаг 2/5", status)
         self.assertIn("Собираю структуру", status)
+
+    def test_carousel_logo_uses_user_id_not_chat_id(self):
+        from handlers.carousel_flow import _resolve_user_logo_for_message
+
+        message = SimpleNamespace(
+            from_user=SimpleNamespace(id=123),
+            chat=SimpleNamespace(id=-100987),
+        )
+
+        with patch("handlers.carousel_flow.get_user_logo", return_value="brand") as mocked:
+            self.assertEqual(_resolve_user_logo_for_message(message), "brand")
+
+        mocked.assert_called_once_with(123)
+
+    def test_carousel_logo_falls_back_to_chat_id_without_user(self):
+        from handlers.carousel_flow import _resolve_user_logo_for_message
+
+        message = SimpleNamespace(
+            from_user=None,
+            chat=SimpleNamespace(id=456),
+        )
+
+        with patch("handlers.carousel_flow.get_user_logo", return_value="chat-brand") as mocked:
+            self.assertEqual(_resolve_user_logo_for_message(message), "chat-brand")
+
+        mocked.assert_called_once_with(456)
+
+    def test_logo_settings_accept_text_only(self):
+        source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
+
+        self.assertIn("@router.message(Settings.waiting_for_logo, F.text)", source)
+        self.assertIn("async def settings_logo_wrong_input", source)
 
     def test_custom_background_disables_ai_html_renderer(self):
         source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")

@@ -387,7 +387,7 @@ async def settings_reset_logo(callback: types.CallbackQuery):
     )
 
 
-@router.message(Settings.waiting_for_logo)
+@router.message(Settings.waiting_for_logo, F.text)
 async def settings_save_logo(message: types.Message, state: FSMContext):
     new_logo = message.text.strip()
     if len(new_logo) > 20:
@@ -396,6 +396,11 @@ async def settings_save_logo(message: types.Message, state: FSMContext):
     set_user_logo(message.from_user.id, new_logo)
     await state.clear()
     await message.answer(f"✅ Логотип изменен на: `{new_logo}`")
+
+
+@router.message(Settings.waiting_for_logo)
+async def settings_logo_wrong_input(message: types.Message):
+    await message.answer("Отправьте логотип текстом, максимум 20 символов.")
 
 
 @router.message(F.text == "📬 Обратная связь")

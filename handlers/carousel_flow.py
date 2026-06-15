@@ -80,6 +80,11 @@ from handlers.common import (
 router = Router()
 
 
+def _resolve_user_logo_for_message(message: types.Message) -> str:
+    user_id = message.from_user.id if message.from_user else message.chat.id
+    return get_user_logo(user_id)
+
+
 def _build_pipeline_status(step: int, total_steps: int, title: str, detail: str = "") -> str:
     lines = [
         "⏳ Генерация карусели",
@@ -353,7 +358,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     )
     caption = await generate_instagram_caption(text, slides_content)
     threads_summary = ""
-    user_logo = get_user_logo(message.chat.id)
+    user_logo = _resolve_user_logo_for_message(message)
     layout_specs = build_instagram_layout_specs(carousel_plan, visual_mode=visual_mode, layout_style=layout_style)
     custom_bg_bytes = data.get("insta_custom_bg_bytes")
     custom_bg_mime_type = data.get("insta_custom_bg_mime_type", "image/jpeg")
