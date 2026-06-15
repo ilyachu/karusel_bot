@@ -394,6 +394,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
                     user_logo,
                     custom_background_data_url,
                     "strong",
+                    allow_ai_html=False,
                 )
             except Exception as exc:
                 logging.warning("HTML renderer unavailable for custom background, falling back to Pillow: %s", exc)
@@ -413,7 +414,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
                     layout_spec,
                     user_logo,
                     preset_background_data_url,
-                    "strong",
+                    "medium",
                 )
             except Exception as exc:
                 logging.warning("HTML renderer unavailable, falling back to Pillow: %s", exc)

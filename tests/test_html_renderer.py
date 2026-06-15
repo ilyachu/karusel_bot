@@ -187,6 +187,74 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertNotIn("Шаблонный заголовок", html)
         # When custom bg is provided, it must remain visible — no grayscale desaturation
         self.assertNotIn("grayscale", html)
+        self.assertNotIn("background:#101820", html)
+        self.assertIn("background-color:rgba(", html)
+
+    def test_build_slide_html_can_disable_ai_html_for_custom_background(self):
+        data_url = "data:image/png;base64,ZmFrZQ=="
+        plan = parse_carousel_plan(
+            {
+                "carousel": {"layout_style": "poster", "theme_hint": "creator_bold"},
+                "slides": [
+                    {
+                        "index": 1,
+                        "role": "hook",
+                        "title": "Стабильный заголовок",
+                        "body": "Текст должен рендериться контролируемым шаблоном.",
+                        "html_body": (
+                            '<section style="width:1080px;height:1350px;background:#101820;'
+                            'color:rgba(10,10,10,0.25);"><h1>AI broken slide</h1></section>'
+                        ),
+                    }
+                ],
+            }
+        )
+        spec = build_instagram_layout_specs(plan, layout_style="poster")[0]
+
+        html = build_slide_html(
+            spec,
+            logo_text="chu ai",
+            custom_background_data_url=data_url,
+            background_intensity="strong",
+            allow_ai_html=False,
+        )
+
+        self.assertIn(data_url, html)
+        self.assertIn("Стабильный заголовок", html)
+        self.assertIn("custom-bg", html)
+        self.assertNotIn("AI broken slide", html)
+        self.assertNotIn("background:#101820", html)
+
+    def test_build_slide_html_softens_ai_root_background_for_external_bg(self):
+        data_url = "data:image/png;base64,ZmFrZQ=="
+        plan = parse_carousel_plan(
+            {
+                "carousel": {"layout_style": "magazine", "theme_hint": "founder_brief"},
+                "slides": [
+                    {
+                        "index": 1,
+                        "role": "hook",
+                        "title": "Root bg",
+                        "body": "Readable over user background",
+                        "html_body": (
+                            "<section style=\"width:100%;height:100%;background-color:#f4f2ed;color:#111827;padding:72px;\">"
+                            "<h1>Readable</h1><p>Panel stays readable.</p></section>"
+                        ),
+                    }
+                ],
+            }
+        )
+        spec = build_instagram_layout_specs(plan, layout_style="magazine")[0]
+
+        html = build_slide_html(
+            spec,
+            logo_text="chu ai",
+            custom_background_data_url=data_url,
+            background_intensity="strong",
+        )
+
+        self.assertIn("background-color:rgba(244, 242, 237, 0.78)", html)
+        self.assertNotIn("background-color:#f4f2ed", html)
 
     def test_build_slide_html_falls_back_when_ai_html_body_missing_markup(self):
         plan = parse_carousel_plan(

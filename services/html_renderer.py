@@ -40,11 +40,13 @@ def build_slide_html(
     logo_text: str = "chu ai",
     custom_background_data_url: str = "",
     background_intensity: str = "medium",
+    allow_ai_html: bool = True,
 ) -> str:
     """Route to the correct HTML builder based on layout_style."""
-    ai_html = _build_ai_slide_html(spec, custom_background_data_url, background_intensity)
-    if ai_html:
-        return ai_html
+    if allow_ai_html:
+        ai_html = _build_ai_slide_html(spec, custom_background_data_url, background_intensity)
+        if ai_html:
+            return ai_html
 
     style = spec.layout_style
     if style not in LAYOUT_STYLE_FONTS:
@@ -172,6 +174,8 @@ def _build_ai_slide_html(
     texture_css = _texture_css_for_slide(getattr(spec, "theme", "business_dark"))
     fonts_block = f'<link href="https://fonts.googleapis.com/css2?{imports}&display=swap" rel="stylesheet">' if imports else ""
     safe_bg = _safe_data_image_url(custom_background_data_url)
+    if safe_bg:
+        html_body = _soften_ai_root_background(html_body)
     background = _background_treatment(background_intensity)
     background_markup = (
         f'<div class="ai-custom-bg" style="background-image:url(&quot;{safe_bg}&quot;);"></div>'
@@ -238,6 +242,80 @@ def _sanitize_ai_html_body(value: str) -> str:
     if not re.search(r"<[a-zA-Z][^>]*>", html_body):
         return ""
     return html_body
+
+
+def _soften_ai_root_background(html_body: str) -> str:
+    match = re.search(r"<([a-zA-Z][^>\s]*)([^>]*)style=(['\"])(.*?)(\3)([^>]*)>", html_body, flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return html_body
+
+    style_value = match.group(4)
+    softened_style = _soften_root_style_value(style_value)
+    if softened_style == style_value:
+        return html_body
+
+    start, end = match.span(4)
+    return html_body[:start] + softened_style + html_body[end:]
+
+
+def _soften_root_style_value(style_value: str) -> str:
+    background_match = re.search(r"background(?:-color)?\s*:\s*([^;]+)", style_value, flags=re.IGNORECASE)
+    if not background_match:
+        return style_value
+
+    raw_value = background_match.group(1).strip()
+    softened_value = _softened_background_value(raw_value)
+    if not softened_value:
+        return style_value
+
+    softened_style = re.sub(
+        r"background(?:-color)?\s*:\s*([^;]+);?",
+        f"background-color:{softened_value};",
+        style_value,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    if "backdrop-filter" not in softened_style.lower():
+        softened_style += "backdrop-filter:blur(8px);"
+    if "border:" not in softened_style.lower():
+        softened_style += "border:1px solid rgba(255,255,255,0.14);"
+    if "box-shadow" not in softened_style.lower():
+        softened_style += "box-shadow:0 18px 44px rgba(0,0,0,0.22);"
+    return softened_style
+
+
+def _softened_background_value(raw_value: str) -> str:
+    compact = raw_value.strip().lower()
+    if compact.startswith("#"):
+        hex_value = compact[1:]
+        if len(hex_value) == 3:
+            hex_value = "".join(ch * 2 for ch in hex_value)
+        if len(hex_value) != 6:
+            return ""
+        try:
+            r = int(hex_value[0:2], 16)
+            g = int(hex_value[2:4], 16)
+            b = int(hex_value[4:6], 16)
+        except ValueError:
+            return ""
+        alpha = 0.78 if (r + g + b) / 3 > 160 else 0.62
+        return f"rgba({r}, {g}, {b}, {alpha:.2f})"
+
+    rgb_match = re.match(r"rgba?\(([^)]+)\)", compact)
+    if rgb_match:
+        parts = [part.strip() for part in rgb_match.group(1).split(",")]
+        if len(parts) < 3:
+            return ""
+        try:
+            r = int(float(parts[0]))
+            g = int(float(parts[1]))
+            b = int(float(parts[2]))
+        except ValueError:
+            return ""
+        alpha = 0.78 if (r + g + b) / 3 > 160 else 0.62
+        return f"rgba({r}, {g}, {b}, {alpha:.2f})"
+
+    return ""
 
 
 def _google_font_imports_for_html(layout_style: str, html_body: str) -> str:
@@ -774,12 +852,14 @@ def render_layout_spec_html(
     logo_text: str = "chu ai",
     custom_background_data_url: str = "",
     background_intensity: str = "medium",
+    allow_ai_html: bool = True,
 ) -> bytes:
     html_content = build_slide_html(
         spec,
         logo_text=logo_text,
         custom_background_data_url=custom_background_data_url,
         background_intensity=background_intensity,
+        allow_ai_html=allow_ai_html,
     )
 
     # Try Playwright first

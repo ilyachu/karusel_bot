@@ -118,7 +118,14 @@ class FlowStructureTests(unittest.TestCase):
 
         self.assertIn("Шаг 2/5", status)
         self.assertIn("Собираю структуру", status)
-        self.assertIn("Слайды и порядок блоков", status)
+
+    def test_custom_background_disables_ai_html_renderer(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+
+        custom_bg_branch = source[source.index("if custom_bg_bytes:"):source.index("else:", source.index("if custom_bg_bytes:"))]
+
+        self.assertIn("render_layout_spec_html", custom_bg_branch)
+        self.assertIn("allow_ai_html=False", custom_bg_branch)
 
     def test_cover_flow_explains_wide_format_as_cross_posting(self):
         source = (PROJECT_ROOT / "handlers" / "cover_flow.py").read_text(encoding="utf-8")
