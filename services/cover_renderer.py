@@ -184,9 +184,10 @@ def normalize_cover_plan(raw_plan: dict | None, base_text: str, style: str, form
 
 
 def build_cover_html(plan: CoverPlan) -> str:
-    ai_html = _build_ai_cover_html(plan)
-    if ai_html:
-        return ai_html
+    if not plan.background_data_url:
+        ai_html = _build_ai_cover_html(plan)
+        if ai_html:
+            return ai_html
 
     style_tokens = COVER_STYLES.get(plan.style, COVER_STYLES["orange_poster"])
     fmt = COVER_FORMATS.get(plan.format_key, COVER_FORMATS["post"])

@@ -178,6 +178,33 @@ class CoverRendererTests(unittest.TestCase):
         self.assertIn("ai-texture", html)
         self.assertNotIn("Шаблонный headline", html)
 
+    def test_build_cover_html_ignores_ai_html_when_custom_background_present(self):
+        data_url = image_bytes_to_data_url(b"fake-image", "image/png")
+        plan = CoverPlan(
+            headline="Свой фон",
+            subtitle="типографика должна остаться поверх загруженного фона",
+            eyebrow_left="ФОН · TEST",
+            eyebrow_right="CUSTOM",
+            footer_left="ДЛЯ ОБЛОЖКИ",
+            symbol="dot",
+            style="blur_field",
+            format_key="post",
+            background_data_url=data_url,
+            html_body=(
+                '<section style="width:100%;height:100%;background:#0b1020;color:#f6f3ea;'
+                'padding:80px;font-family: Space Grotesk;"><h1>AI cover</h1></section>'
+            ),
+        )
+
+        html = build_cover_html(plan)
+
+        self.assertIn("custom-background", html)
+        self.assertIn(data_url, html)
+        self.assertIn("Свой фон", html)
+        self.assertIn("cover-blur-field", html)
+        self.assertNotIn("AI cover", html)
+        self.assertNotIn("ai-custom-bg", html)
+
     def test_build_cover_html_falls_back_when_ai_html_body_invalid(self):
         plan = CoverPlan(
             headline="Нормальный headline",
