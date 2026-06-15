@@ -14,9 +14,35 @@ def _google_fonts_link(layout_style: str) -> str:
     return f'https://fonts.googleapis.com/css2?{families}&display=swap'
 
 
-def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai", custom_background_data_url: str = "") -> str:
+def _background_treatment(background_intensity: str) -> dict[str, str]:
+    treatments = {
+        "soft": {
+            "opacity": "0.28",
+            "filter": "contrast(1.04) saturate(0.84)",
+            "overlay": "linear-gradient(180deg, rgba(7, 10, 18, 0.10), rgba(7, 10, 18, 0.24))",
+        },
+        "medium": {
+            "opacity": "0.46",
+            "filter": "contrast(1.08) saturate(0.92)",
+            "overlay": "linear-gradient(180deg, rgba(7, 10, 18, 0.12), rgba(7, 10, 18, 0.36))",
+        },
+        "strong": {
+            "opacity": "0.64",
+            "filter": "contrast(1.12) saturate(1.02)",
+            "overlay": "linear-gradient(180deg, rgba(7, 10, 18, 0.10), rgba(7, 10, 18, 0.44))",
+        },
+    }
+    return treatments.get(background_intensity, treatments["medium"])
+
+
+def build_slide_html(
+    spec: LayoutSpec,
+    logo_text: str = "chu ai",
+    custom_background_data_url: str = "",
+    background_intensity: str = "medium",
+) -> str:
     """Route to the correct HTML builder based on layout_style."""
-    ai_html = _build_ai_slide_html(spec, custom_background_data_url)
+    ai_html = _build_ai_slide_html(spec, custom_background_data_url, background_intensity)
     if ai_html:
         return ai_html
 
@@ -31,7 +57,7 @@ def build_slide_html(spec: LayoutSpec, logo_text: str = "chu ai", custom_backgro
         "carddeck": _build_carddeck_slide_html,
     }
     builder = builders.get(style, _build_magazine_slide_html)
-    return builder(spec, logo_text, custom_background_data_url)
+    return builder(spec, logo_text, custom_background_data_url, background_intensity)
 
 
 THEME_TOKENS = {
@@ -133,7 +159,11 @@ AI_FONT_QUERIES = {
 }
 
 
-def _build_ai_slide_html(spec: LayoutSpec, custom_background_data_url: str = "") -> str:
+def _build_ai_slide_html(
+    spec: LayoutSpec,
+    custom_background_data_url: str = "",
+    background_intensity: str = "medium",
+) -> str:
     html_body = _sanitize_ai_html_body(getattr(spec, "html_body", ""))
     if not html_body:
         return ""
@@ -142,27 +172,28 @@ def _build_ai_slide_html(spec: LayoutSpec, custom_background_data_url: str = "")
     texture_css = _texture_css_for_slide(getattr(spec, "theme", "business_dark"))
     fonts_block = f'<link href="https://fonts.googleapis.com/css2?{imports}&display=swap" rel="stylesheet">' if imports else ""
     safe_bg = _safe_data_image_url(custom_background_data_url)
+    background = _background_treatment(background_intensity)
     background_markup = (
         f'<div class="ai-custom-bg" style="background-image:url(&quot;{safe_bg}&quot;);"></div>'
         if safe_bg
         else ""
     )
-    background_css = """
-    .ai-custom-bg {
+    background_css = f"""
+    .ai-custom-bg {{
       position: absolute;
       inset: 0;
       background-position: center;
       background-size: cover;
-      opacity: 0.22;
-      filter: contrast(1.06) saturate(0.9);
+      opacity: {background["opacity"]};
+      filter: {background["filter"]};
       z-index: 0;
-    }
-    .ai-custom-bg::after {
+    }}
+    .ai-custom-bg::after {{
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, rgba(7, 10, 18, 0.08), rgba(7, 10, 18, 0.22));
-    }
+      background: {background["overlay"]};
+    }}
     """ if safe_bg else ""
 
     return f"""<!DOCTYPE html>
@@ -258,6 +289,7 @@ def _build_magazine_slide_html(
     spec: LayoutSpec,
     logo_text: str = "chu ai",
     custom_background_data_url: str = "",
+    background_intensity: str = "medium",
 ) -> str:
     fonts = LAYOUT_STYLE_FONTS["magazine"]
     title = html.escape(spec.title)
@@ -270,38 +302,60 @@ def _build_magazine_slide_html(
     theme = spec.theme if spec.theme in {"memory_archive", "founder_brief", "research_mono"} else "memory_archive"
     stage_align = "justify-content: center;" if spec.text_position == "center" else ""
 
-    # Палитра: тёмная или светлая в зависимости от темы
-    if theme in {"research_mono", "founder_brief"}:
-        bg = "#f8f7f3" if theme == "research_mono" else "#f8fbff"
-        text_color = "#111827"
-        muted = "#6b7280"
-        accent = "#b91c1c" if theme == "research_mono" else "#0369a1"
-        line = "rgba(17,24,39,0.10)"
-        tag_bg = "rgba(0,0,0,0.04)"
-        watermark = "rgba(17,24,39,0.04)"
-    else:
-        bg = "#09070f"
-        text_color = "#f5f1ff"
-        muted = "#9ca3af"
-        accent = "#b89cff"
-        line = "rgba(255,255,255,0.10)"
-        tag_bg = "rgba(255,255,255,0.05)"
-        watermark = "rgba(255,255,255,0.04)"
-
     safe_bg = _safe_data_image_url(custom_background_data_url)
+    has_custom_bg = bool(safe_bg)
+
+    # Палитра: тёмная или светлая в зависимости от темы.
+    # Если есть кастомный фон — выбираем контрастные цвета текста
+    # и НЕ накладываем непрозрачные заливки поверх.
+    if theme in {"research_mono", "founder_brief"}:
+        text_color = "#111827"
+        muted = "#1f2937"
+        accent = "#b91c1c" if theme == "research_mono" else "#0369a1"
+        line = "rgba(17,24,39,0.45)"
+        tag_bg = "rgba(255,255,255,0.55)"
+        watermark = "rgba(17,24,39,0.18)"
+        text_shadow = "0 2px 12px rgba(255,255,255,0.55), 0 0 2px rgba(255,255,255,0.7)"
+        muted_shadow = "0 1px 8px rgba(255,255,255,0.45)"
+    else:
+        text_color = "#ffffff"
+        muted = "#f5f5f5"
+        accent = "#b89cff"
+        line = "rgba(255,255,255,0.75)"
+        tag_bg = "rgba(0,0,0,0.40)"
+        watermark = "rgba(255,255,255,0.22)"
+        text_shadow = "0 2px 14px rgba(0,0,0,0.70), 0 0 2px rgba(0,0,0,0.85)"
+        muted_shadow = "0 1px 10px rgba(0,0,0,0.60)"
+
+    if has_custom_bg:
+        # Прозрачный фон body, без overlay — кастомное изображение видно
+        bg = "transparent"
+        bg_opacity = "1.0"
+        bg_filter = "none"
+    else:
+        bg = "#f8f7f3" if theme == "research_mono" else "#f8fbff" if theme == "founder_brief" else "#09070f"
+        bg_opacity = "0"
+        bg_filter = "none"
+        text_shadow = "none"
+        muted_shadow = "none"
+
     custom_bg_html = f'''
     .custom-bg {{
       position: absolute; inset: 0; z-index: 0;
       background: url("{safe_bg}") center/cover no-repeat;
-      filter: contrast(1.08) saturate(0.82);
-      opacity: 0.24;
+      filter: {bg_filter};
+      opacity: {bg_opacity};
     }}
-    .custom-bg::after {{
-      content: ""; position: absolute; inset: 0;
-      background: linear-gradient(135deg, {bg}, transparent 60%);
+    .custom-bg-overlay {{
+      position: absolute; inset: 0; z-index: 0;
+      background: {"linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.45) 100%)" if theme in {"research_mono","founder_brief"} else "linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.50) 100%)"};
     }}
-    ''' if safe_bg else ""
-    custom_bg_div = '<div class="custom-bg"></div>' if safe_bg else ""
+    ''' if has_custom_bg else ""
+    custom_bg_div = (
+        f'<div class="custom-bg"></div><div class="custom-bg-overlay"></div>'
+        if has_custom_bg
+        else ""
+    )
     google_fonts = _google_fonts_link("magazine")
 
     supporting_html = "".join(
@@ -319,20 +373,20 @@ def _build_magazine_slide_html(
     body {{ width: 1080px; height: 1350px; overflow: hidden; background: {bg}; color: {text_color}; }}
     .canvas {{ position: relative; width: 1080px; height: 1350px; padding: 80px 72px 60px; display: flex; flex-direction: column; }}
     {custom_bg_html}
-    .topbar {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: {"60px" if is_cover else "40px"}; position: relative; z-index: 1; }}
-    .section-label {{ font-family: {fonts["heading"]}; font-size: 18px; letter-spacing: 0.2em; text-transform: uppercase; color: {muted}; }}
-    .brand {{ font-family: {fonts["heading"]}; font-size: 20px; font-style: italic; color: {accent}; }}
-    .stage {{ position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; {stage_align}}}
-    .watermark {{ position: absolute; top: {"40px" if is_cover else "0"}; right: 0; font-family: {fonts["heading"]}; font-size: {"160px" if is_cover else "120px"}; color: {watermark}; line-height: 0.8; pointer-events: none; user-select: none; z-index: 0; }}
-    .title {{ font-family: {fonts["heading"]}; font-size: {"88px" if is_cover else "64px" if is_cta else "54px"}; line-height: 0.96; font-weight: 900; max-width: {"860px" if is_cover else "720px"}; letter-spacing: -0.03em; position: relative; z-index: 2; margin-bottom: {"32px" if is_cover else "24px"}; }}
+    .topbar {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: {"60px" if is_cover else "40px"}; position: relative; z-index: 2; }}
+    .section-label {{ font-family: {fonts["heading"]}; font-size: 18px; letter-spacing: 0.2em; text-transform: uppercase; color: {muted}; text-shadow: {muted_shadow}; }}
+    .brand {{ font-family: {fonts["heading"]}; font-size: 20px; font-style: italic; color: {accent}; text-shadow: {muted_shadow}; }}
+    .stage {{ position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column; {stage_align}}}
+    .watermark {{ position: absolute; top: {"40px" if is_cover else "0"}; right: 0; font-family: {fonts["heading"]}; font-size: {"160px" if is_cover else "120px"}; color: {watermark}; line-height: 0.8; pointer-events: none; user-select: none; z-index: 1; text-shadow: {text_shadow}; }}
+    .title {{ font-family: {fonts["heading"]}; font-size: {"88px" if is_cover else "64px" if is_cta else "54px"}; line-height: 0.96; font-weight: 900; max-width: {"860px" if is_cover else "720px"}; letter-spacing: -0.03em; position: relative; z-index: 3; margin-bottom: {"32px" if is_cover else "24px"}; text-shadow: {text_shadow}; }}
     .title.cta {{ font-style: italic; font-size: 72px; color: {accent}; }}
-    .divider {{ width: 80px; height: 3px; background: {accent}; margin-bottom: 24px; }}
-    .body {{ font-family: {fonts["body"]}; font-size: {"30px" if is_cover else "26px"}; line-height: 1.5; color: {muted}; max-width: {"740px" if is_cover else "620px"}; }}
+    .divider {{ width: 80px; height: 3px; background: {accent}; margin-bottom: 24px; box-shadow: 0 1px 6px rgba(0,0,0,0.45); }}
+    .body {{ font-family: {fonts["body"]}; font-size: {"30px" if is_cover else "26px"}; line-height: 1.5; color: {muted}; max-width: {"740px" if is_cover else "620px"}; text-shadow: {muted_shadow}; }}
     .supporting {{ display: {"grid" if supporting_html else "none"}; grid-template-columns: repeat({min(len(spec.supporting_cards[:3]), 2)}, 1fr); gap: 14px; margin-top: 28px; max-width: 700px; }}
     .mag-card {{ padding: 18px; border: 1px solid {line}; background: {tag_bg}; }}
-    .mag-card span {{ font-family: {fonts["heading"]}; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: {accent}; display: block; margin-bottom: 6px; }}
-    .mag-card strong {{ font-family: {fonts["body"]}; font-size: 20px; font-weight: 500; color: {text_color}; display: block; }}
-    .footer {{ position: absolute; left: 72px; right: 72px; bottom: 56px; display: flex; justify-content: space-between; font-family: {fonts["body"]}; font-size: 18px; color: {muted}; z-index: 2; }}
+    .mag-card span {{ font-family: {fonts["heading"]}; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: {accent}; display: block; margin-bottom: 6px; text-shadow: {muted_shadow}; }}
+    .mag-card strong {{ font-family: {fonts["body"]}; font-size: 20px; font-weight: 500; color: {text_color}; display: block; text-shadow: {muted_shadow}; }}
+    .footer {{ position: absolute; left: 72px; right: 72px; bottom: 56px; display: flex; justify-content: space-between; font-family: {fonts["body"]}; font-size: 18px; color: {muted}; z-index: 3; text-shadow: {muted_shadow}; }}
   </style>
 </head>
 <body>
@@ -367,6 +421,7 @@ def _build_terminal_slide_html(
     spec: LayoutSpec,
     logo_text: str = "chu ai",
     custom_background_data_url: str = "",
+    background_intensity: str = "medium",
 ) -> str:
     fonts = LAYOUT_STYLE_FONTS["terminal"]
     title = html.escape(spec.title)
@@ -390,14 +445,37 @@ def _build_terminal_slide_html(
     )
 
     safe_bg = _safe_data_image_url(custom_background_data_url)
+    has_custom_bg = bool(safe_bg)
+
+    if has_custom_bg:
+        # Полупрозрачная панель сверху для контраста, но фон виден
+        body_bg = "transparent"
+        header_bg = "rgba(0,0,0,0.55)"
+        ascii_bg = "rgba(0,0,0,0.55)"
+        text_shadow = "0 1px 8px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.95)"
+        panel_color = "#ffffff"
+    else:
+        body_bg = "#0a0e0a"
+        header_bg = "rgba(0,0,0,0.4)"
+        ascii_bg = "rgba(0,0,0,0.3)"
+        text_shadow = "none"
+        panel_color = accent
+
     custom_bg_css = f'''
     .custom-bg {{
       position: absolute; inset: 0; z-index: 0;
       background: url("{safe_bg}") center/cover no-repeat;
-      opacity: 0.12; filter: grayscale(1) contrast(1.4);
     }}
-    ''' if safe_bg else ""
-    custom_bg_div = '<div class="custom-bg"></div>' if safe_bg else ""
+    .custom-bg-overlay {{
+      position: absolute; inset: 0; z-index: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.30) 50%, rgba(0,0,0,0.55) 100%);
+    }}
+    ''' if has_custom_bg else ""
+    custom_bg_div = (
+        f'<div class="custom-bg"></div><div class="custom-bg-overlay"></div>'
+        if has_custom_bg
+        else ""
+    )
     google_fonts = _google_fonts_link("terminal")
 
     return f'''<!DOCTYPE html>
@@ -407,24 +485,24 @@ def _build_terminal_slide_html(
   <link href="{google_fonts}" rel="stylesheet">
   <style>
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ width: 1080px; height: 1350px; overflow: hidden; background: #0a0e0a; color: {accent}; font-family: {fonts["heading"]}; }}
+    body {{ width: 1080px; height: 1350px; overflow: hidden; background: {body_bg}; color: {accent}; font-family: {fonts["heading"]}; }}
     .canvas {{ position: relative; width: 1080px; height: 1350px; padding: 48px; display: flex; flex-direction: column; }}
     {custom_bg_css}
-    .header-bar {{ font-size: 22px; color: {dim_accent}; margin-bottom: 36px; padding: 12px 20px; border: 1px solid {dim_accent}; background: rgba(0,0,0,0.4); position: relative; z-index: 1; }}
+    .header-bar {{ font-size: 22px; color: {accent}; margin-bottom: 36px; padding: 12px 20px; border: 1px solid {accent}; background: {header_bg}; position: relative; z-index: 2; text-shadow: {text_shadow}; }}
     .header-bar::before {{ content: "{"> " if is_warm else "$ "}"; color: {accent}; }}
-    .stage {{ flex: 1; padding: {"80px 28px" if is_cover else "40px 28px"}; position: relative; z-index: 1; {stage_align}}}
-    .ascii-box {{ border: 1px solid {dim_accent}; padding: {"36px" if is_cover else "28px"}; margin-bottom: 24px; background: rgba(0,0,0,0.3); position: relative; }}
-    .ascii-box::before {{ content: "┌─── " attr(data-label) " ───"; position: absolute; top: -14px; left: 20px; background: #0a0e0a; padding: 0 10px; font-size: 16px; color: {dim_accent}; }}
-    .ascii-box::after {{ content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 1px; background: {dim_accent}; }}
-    .title {{ font-size: {"46px" if is_cover else "34px"}; font-weight: 800; line-height: 1.1; color: {accent}; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.04em; }}
-    .body {{ font-size: 24px; line-height: 1.5; color: {"#d4d4d4" if is_cta else "#b8c8b8"}; }}
+    .stage {{ flex: 1; padding: {"80px 28px" if is_cover else "40px 28px"}; position: relative; z-index: 2; {stage_align}}}
+    .ascii-box {{ border: 1px solid {accent}; padding: {"36px" if is_cover else "28px"}; margin-bottom: 24px; background: {ascii_bg}; position: relative; }}
+    .ascii-box::before {{ content: "┌─── " attr(data-label) " ───"; position: absolute; top: -14px; left: 20px; background: {"#0a0e0a" if not has_custom_bg else "rgba(0,0,0,0.85)"}; padding: 0 10px; font-size: 16px; color: {accent}; }}
+    .ascii-box::after {{ content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 1px; background: {accent}; }}
+    .title {{ font-size: {"46px" if is_cover else "34px"}; font-weight: 800; line-height: 1.1; color: {accent}; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.04em; text-shadow: {text_shadow}; }}
+    .body {{ font-size: 24px; line-height: 1.5; color: {panel_color if has_custom_bg else ("#d4d4d4" if is_cta else "#b8c8b8")}; text-shadow: {text_shadow}; }}
     .body.cta-text {{ color: {accent}; font-weight: 700; font-size: 28px; }}
-    .progress-line {{ font-size: 20px; color: {dim_accent}; margin-top: {"auto" if not is_cover else "48px"}; font-family: {fonts["heading"]}; }}
+    .progress-line {{ font-size: 20px; color: {accent}; margin-top: {"auto" if not is_cover else "48px"}; font-family: {fonts["heading"]}; text-shadow: {text_shadow}; }}
     .progress-bar {{ display: flex; gap: 4px; margin-top: 8px; }}
     .progress-fill {{ flex: none; color: {accent}; font-size: 22px; letter-spacing: 2px; }}
     .progress-empty {{ flex: none; color: {dim_accent}; font-size: 22px; letter-spacing: 2px; }}
-    .supporting {{ margin-top: 20px; padding: 14px 18px; border-left: 2px solid {dim_accent}; font-size: 20px; color: #889988; }}
-    .footer {{ position: absolute; left: 48px; right: 48px; bottom: 40px; display: flex; justify-content: space-between; font-size: 18px; color: {dim_accent}; z-index: 2; }}
+    .supporting {{ margin-top: 20px; padding: 14px 18px; border-left: 2px solid {accent}; font-size: 20px; color: {panel_color if has_custom_bg else "#889988"}; text-shadow: {text_shadow}; }}
+    .footer {{ position: absolute; left: 48px; right: 48px; bottom: 40px; display: flex; justify-content: space-between; font-size: 18px; color: {accent}; z-index: 3; text-shadow: {text_shadow}; }}
     .cursor {{ display: inline-block; width: 12px; height: 24px; background: {accent}; animation: blink 1s step-end infinite; vertical-align: middle; margin-left: 4px; }}
     @keyframes blink {{ 50% {{ opacity: 0; }} }}
   </style>
@@ -464,6 +542,7 @@ def _build_poster_slide_html(
     spec: LayoutSpec,
     logo_text: str = "chu ai",
     custom_background_data_url: str = "",
+    background_intensity: str = "medium",
 ) -> str:
     fonts = LAYOUT_STYLE_FONTS["poster"]
     title = html.escape(spec.title)
@@ -486,9 +565,32 @@ def _build_poster_slide_html(
     body_short = body_lines[0][:60] if body_lines else body
 
     safe_bg = _safe_data_image_url(custom_background_data_url)
-    custom_bg_div = f'''
-    <div class="custom-bg" style="background: url("{safe_bg}") center/cover no-repeat; filter: grayscale(0.6) contrast(1.2); opacity: 0.18;"></div>
-    ''' if safe_bg else ""
+    has_custom_bg = bool(safe_bg)
+
+    if has_custom_bg:
+        # Без сплошной заливки — кастомный фон виден
+        block_bg = "rgba(0,0,0,0.45)"
+        body_bg = "transparent"
+        text_color_eff = "#ffffff"
+        block_text_color = "#ffffff"
+        block_text_shadow = "0 2px 14px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.95)"
+    else:
+        block_bg = block_color
+        body_bg = text_color
+        text_color_eff = block_color
+        block_text_color = text_color
+        block_text_shadow = "none"
+
+    custom_bg_div = (
+        f'<div class="custom-bg" style="position:absolute; inset:0; z-index:0; background:url(&quot;{safe_bg}&quot;) center/cover no-repeat;"></div>'
+        if has_custom_bg
+        else ""
+    )
+    custom_bg_overlay = (
+        '<div class="custom-bg-overlay" style="position:absolute; inset:0; z-index:0; background:linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.45) 100%);"></div>'
+        if has_custom_bg
+        else ""
+    )
     google_fonts = _google_fonts_link("poster")
 
     # progress dots - собираем отдельно, избегая вложенных f-строк
@@ -507,24 +609,25 @@ def _build_poster_slide_html(
   <link href="{google_fonts}" rel="stylesheet">
   <style>
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ width: 1080px; height: 1350px; overflow: hidden; background: {text_color}; color: {block_color}; }}
+    body {{ width: 1080px; height: 1350px; overflow: hidden; background: {body_bg}; color: {text_color_eff}; }}
     .canvas {{ position: relative; width: 1080px; height: 1350px; display: flex; flex-direction: column; }}
-    .block {{ position: absolute; {"top: 0; left: 0; right: 0; height: 58%;" if not is_cta else "top: 0; left: 0; right: 0; bottom: 0;"} background: {block_color}; display: flex; align-items: center; justify-content: center; overflow: hidden; }}
-    .block-text {{ font-family: {fonts["heading"]}; font-size: {"120px" if is_cover else "96px" if not is_cta else "80px"}; font-weight: 900; color: {text_color}; line-height: 0.92; text-align: center; max-width: 880px; padding: 40px; letter-spacing: -0.04em; word-break: break-word; }}
+    .block {{ position: absolute; {"top: 0; left: 0; right: 0; height: 58%;" if not is_cta else "top: 0; left: 0; right: 0; bottom: 0;"} background: {block_bg}; display: flex; align-items: center; justify-content: center; overflow: hidden; z-index: 1; }}
+    .block-text {{ font-family: {fonts["heading"]}; font-size: {"120px" if is_cover else "96px" if not is_cta else "80px"}; font-weight: 900; color: {block_text_color}; line-height: 0.92; text-align: center; max-width: 880px; padding: 40px; letter-spacing: -0.04em; word-break: break-word; text-shadow: {block_text_shadow}; position: relative; z-index: 2; }}
     .block-text.small {{ font-size: 60px; }}
-    .footer-zone {{ position: absolute; {"top: 58%;" if not is_cta else "top: auto;"} bottom: 0; left: 0; right: 0; height: {"42%" if not is_cta else "auto"}; display: flex; flex-direction: column; justify-content: center; padding: {"60px 80px" if not is_cta else "48px 80px"}; }}
-    .body-text {{ font-family: {fonts["body"]}; font-size: 32px; line-height: 1.4; color: {block_color}; max-width: 760px; }}
-    .meta {{ position: absolute; left: 72px; right: 72px; bottom: 48px; display: flex; justify-content: space-between; font-family: {fonts["body"]}; font-size: 18px; color: {block_color}; opacity: 0.6; z-index: 2; }}
-    .badge {{ font-family: {fonts["heading"]}; font-size: 18px; letter-spacing: 0.2em; text-transform: uppercase; color: {text_color if not is_cta else block_color}; margin-bottom: {"24px" if is_cta else "0"}; }}
-    .accent-line {{ width: 60px; height: 4px; background: {block_color}; margin-bottom: 16px; }}
-    .progress-dot {{ position: absolute; right: 72px; bottom: 80px; display: flex; gap: 10px; z-index: 2; }}
-    .dot {{ width: 10px; height: 10px; border-radius: 50%; background: {block_color}; opacity: 0.2; }}
-    .dot.active {{ width: 14px; height: 14px; opacity: 1; background: {block_color}; }}
+    .footer-zone {{ position: absolute; {"top: 58%;" if not is_cta else "top: auto;"} bottom: 0; left: 0; right: 0; height: {"42%" if not is_cta else "auto"}; display: flex; flex-direction: column; justify-content: center; padding: {"60px 80px" if not is_cta else "48px 80px"}; z-index: 2; }}
+    .body-text {{ font-family: {fonts["body"]}; font-size: 32px; line-height: 1.4; color: {text_color_eff}; max-width: 760px; text-shadow: {block_text_shadow}; }}
+    .meta {{ position: absolute; left: 72px; right: 72px; bottom: 48px; display: flex; justify-content: space-between; font-family: {fonts["body"]}; font-size: 18px; color: {text_color_eff}; opacity: 0.85; z-index: 3; text-shadow: {block_text_shadow}; }}
+    .badge {{ font-family: {fonts["heading"]}; font-size: 18px; letter-spacing: 0.2em; text-transform: uppercase; color: {block_text_color}; margin-bottom: {"24px" if is_cta else "0"}; text-shadow: {block_text_shadow}; }}
+    .accent-line {{ width: 60px; height: 4px; background: {block_text_color}; margin-bottom: 16px; }}
+    .progress-dot {{ position: absolute; right: 72px; bottom: 80px; display: flex; gap: 10px; z-index: 3; }}
+    .dot {{ width: 10px; height: 10px; border-radius: 50%; background: {block_text_color}; opacity: 0.5; }}
+    .dot.active {{ width: 14px; height: 14px; opacity: 1; background: {block_text_color}; }}
   </style>
 </head>
 <body>
   <div class="canvas">
     {custom_bg_div}
+    {custom_bg_overlay}
     <div class="block">
       <div class="block-text{" small" if len(title) > 30 else ""}">{title}</div>
     </div>
@@ -552,6 +655,7 @@ def _build_carddeck_slide_html(
     spec: LayoutSpec,
     logo_text: str = "chu ai",
     custom_background_data_url: str = "",
+    background_intensity: str = "medium",
 ) -> str:
     fonts = LAYOUT_STYLE_FONTS["carddeck"]
     title = html.escape(spec.title)
@@ -562,17 +666,37 @@ def _build_carddeck_slide_html(
     card_align = "justify-content: center; align-items: center; text-align: center;" if spec.text_position == "center" and not is_cover else ""
 
     accent = "#6366f1"
-    bg = "#0f0f1a"
-    card_bg = "rgba(255,255,255,0.04)"
-    text_color = "#f1f5f9"
-    muted = "#94a3b8"
-    border = "rgba(255,255,255,0.08)"
-
     safe_bg = _safe_data_image_url(custom_background_data_url)
-    custom_bg_div = f'''
-    <div class="custom-bg" style="position:absolute; inset:0; z-index:0; background:url("{safe_bg}") center/cover no-repeat; filter:contrast(1.06) saturate(0.88); opacity:0.18;"></div>
-    <div class="custom-bg-overlay" style="position:absolute; inset:0; z-index:0; background:linear-gradient(180deg, rgba(15,15,26,0.6), rgba(15,15,26,0.9));"></div>
-    ''' if safe_bg else ""
+    has_custom_bg = bool(safe_bg)
+
+    if has_custom_bg:
+        # Карточка полупрозрачная, без blur — фон виден чётко
+        body_bg = "transparent"
+        card_bg = "rgba(15, 15, 26, 0.55)"
+        text_color = "#ffffff"
+        muted = "rgba(255,255,255,0.92)"
+        border = "rgba(255,255,255,0.45)"
+        text_shadow = "0 1px 10px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.95)"
+        backdrop_filter = "none"
+    else:
+        body_bg = "#0f0f1a"
+        card_bg = "rgba(255,255,255,0.04)"
+        text_color = "#f1f5f9"
+        muted = "#94a3b8"
+        border = "rgba(255,255,255,0.08)"
+        text_shadow = "none"
+        backdrop_filter = "blur(16px)"
+
+    custom_bg_div = (
+        f'<div class="custom-bg" style="position:absolute; inset:0; z-index:0; background:url(&quot;{safe_bg}&quot;) center/cover no-repeat;"></div>'
+        if has_custom_bg
+        else ""
+    )
+    custom_bg_overlay = (
+        '<div class="custom-bg-overlay" style="position:absolute; inset:0; z-index:0; background:linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.35) 100%);"></div>'
+        if has_custom_bg
+        else ""
+    )
     google_fonts = _google_fonts_link("carddeck")
 
     supporting_html = "".join(
@@ -594,30 +718,30 @@ def _build_carddeck_slide_html(
   <link href="{google_fonts}" rel="stylesheet">
   <style>
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ width: 1080px; height: 1350px; overflow: hidden; background: {bg}; color: {text_color}; font-family: {fonts["body"]}; }}
+    body {{ width: 1080px; height: 1350px; overflow: hidden; background: {body_bg}; color: {text_color}; font-family: {fonts["body"]}; }}
     .canvas {{ position: relative; width: 1080px; height: 1350px; padding: 48px; display: flex; flex-direction: column; }}
-    {custom_bg_div}
-    .card {{ position: relative; z-index: 1; flex: 1; margin: 0; border-radius: 32px; background: {card_bg}; border: 1px solid {border}; backdrop-filter: blur(16px); padding: {"52px 48px" if is_cover else "44px 44px"}; display: flex; flex-direction: column; {card_align}}}
+    .card {{ position: relative; z-index: 2; flex: 1; margin: 0; border-radius: 32px; background: {card_bg}; border: 1px solid {border}; backdrop-filter: {backdrop_filter}; -webkit-backdrop-filter: {backdrop_filter}; padding: {"52px 48px" if is_cover else "44px 44px"}; display: flex; flex-direction: column; {card_align}}}
     .card.cover {{ justify-content: center; align-items: center; text-align: center; }}
     .topbar {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }}
-    .badge {{ font-size: 14px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: {accent}; padding: 6px 14px; border-radius: 999px; background: rgba(99,102,241,0.10); border: 1px solid rgba(99,102,241,0.15); }}
-    .counter {{ font-size: 16px; color: {muted}; font-weight: 500; }}
-    .title {{ font-family: {fonts["body"]}; font-size: {"64px" if is_cover else "44px" if is_cta else "38px"}; font-weight: 800; line-height: 1.08; margin-bottom: {"24px" if is_cover else "16px"}; letter-spacing: -0.03em; }}
-    .body {{ font-size: {"26px" if is_cover else "24px"}; line-height: 1.5; color: {muted}; max-width: {"640px" if is_cover else "580px"}; }}
+    .badge {{ font-size: 14px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: {accent}; padding: 6px 14px; border-radius: 999px; background: rgba(99,102,241,0.10); border: 1px solid rgba(99,102,241,0.15); text-shadow: {text_shadow}; }}
+    .counter {{ font-size: 16px; color: {muted}; font-weight: 500; text-shadow: {text_shadow}; }}
+    .title {{ font-family: {fonts["body"]}; font-size: {"64px" if is_cover else "44px" if is_cta else "38px"}; font-weight: 800; line-height: 1.08; margin-bottom: {"24px" if is_cover else "16px"}; letter-spacing: -0.03em; text-shadow: {text_shadow}; }}
+    .body {{ font-size: {"26px" if is_cover else "24px"}; line-height: 1.5; color: {muted}; max-width: {"640px" if is_cover else "580px"}; text-shadow: {text_shadow}; }}
     .body.cta {{ font-size: 28px; color: {accent}; font-weight: 600; }}
     .supporting {{ display: {"flex" if supporting_html else "none"}; flex-wrap: wrap; gap: 12px; margin-top: auto; padding-top: 24px; }}
-    .chip {{ display: flex; flex-direction: column; gap: 4px; padding: 14px 18px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid {border}; min-width: 180px; }}
-    .chip span {{ font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: {accent}; }}
-    .chip strong {{ font-size: 18px; font-weight: 600; color: {text_color}; }}
+    .chip {{ display: flex; flex-direction: column; gap: 4px; padding: 14px 18px; border-radius: 16px; background: rgba(255,255,255,0.06); border: 1px solid {border}; min-width: 180px; }}
+    .chip span {{ font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: {accent}; text-shadow: {text_shadow}; }}
+    .chip strong {{ font-size: 18px; font-weight: 600; color: {text_color}; text-shadow: {text_shadow}; }}
     .progress-dots {{ display: flex; gap: 8px; justify-content: center; margin-top: 24px; }}
     .dot {{ width: 8px; height: 8px; border-radius: 50%; background: {border}; transition: all 0.2s; }}
     .dot.active {{ width: 28px; border-radius: 999px; background: {accent}; }}
-    .footer {{ position: absolute; left: 72px; right: 72px; bottom: 48px; display: flex; justify-content: space-between; font-size: 16px; color: {muted}; z-index: 2; }}
+    .footer {{ position: absolute; left: 72px; right: 72px; bottom: 48px; display: flex; justify-content: space-between; font-size: 16px; color: {muted}; z-index: 3; text-shadow: {text_shadow}; }}
   </style>
 </head>
 <body>
   <div class="canvas">
     {custom_bg_div}
+    {custom_bg_overlay}
     <div class="card{" cover" if is_cover else ""}">
       {"<div class='topbar'><div class='badge'>" + html.escape(spec.badge_text).upper() + "</div><div class='counter'>" + str(spec.slide_index) + "/" + str(spec.total_slides) + "</div></div>" if not is_cover else ""}
       <div class="title">{title}</div>
@@ -647,11 +771,13 @@ def render_layout_spec_html(
     spec: LayoutSpec,
     logo_text: str = "chu ai",
     custom_background_data_url: str = "",
+    background_intensity: str = "medium",
 ) -> bytes:
     html_content = build_slide_html(
         spec,
         logo_text=logo_text,
         custom_background_data_url=custom_background_data_url,
+        background_intensity=background_intensity,
     )
 
     # Try Playwright first

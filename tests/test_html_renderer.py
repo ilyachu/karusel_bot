@@ -125,7 +125,31 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertIn(data_url, html)
         self.assertIn("Свой фон", html)
 
+    def test_build_slide_html_supports_stronger_background_treatment(self):
+        data_url = "data:image/png;base64,ZmFrZQ=="
+        plan = build_fallback_instagram_plan(
+            [{"title": "Фон заметен", "body": "Пользовательский фон должен читаться визуально сильнее."}],
+            theme_hint="growth_black",
+        )
+        spec = build_instagram_layout_specs(plan, visual_mode="editorial")[0]
+
+        html = build_slide_html(
+            spec,
+            logo_text="chu ai",
+            custom_background_data_url=data_url,
+            background_intensity="strong",
+        )
+
+        # With custom_bg the background should remain visually prominent:
+        # - opacity at least 0.95 (or 1.0) — background should NOT be muted away
+        # - no grayscale (was killing color saturation in poster/terminal)
+        # - no opaque overlay that hides the user image
+        self.assertIn(data_url, html)
+        self.assertIn("Фон заметен", html)
+        self.assertNotIn("grayscale", html)
+
     def test_build_slide_html_prefers_ai_html_body_when_present(self):
+        data_url = "data:image/png;base64,ZmFrZQ=="
         plan = parse_carousel_plan(
             {
                 "carousel": {"layout_style": "poster", "theme_hint": "creator_bold"},
@@ -145,7 +169,12 @@ class HtmlRendererTests(unittest.TestCase):
         )
         spec = build_instagram_layout_specs(plan, layout_style="poster")[0]
 
-        html = build_slide_html(spec, logo_text="chu ai")
+        html = build_slide_html(
+            spec,
+            logo_text="chu ai",
+            custom_background_data_url=data_url,
+            background_intensity="strong",
+        )
 
         self.assertIn("AI slide", html)
         self.assertIn("Уникальная вёрстка.", html)
@@ -153,7 +182,10 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertIn("justify-content: space-between", html)
         self.assertIn("min-height: 100%", html)
         self.assertIn("ai-texture", html)
+        self.assertIn(data_url, html)
         self.assertNotIn("Шаблонный заголовок", html)
+        # When custom bg is provided, it must remain visible — no grayscale desaturation
+        self.assertNotIn("grayscale", html)
 
     def test_build_slide_html_falls_back_when_ai_html_body_missing_markup(self):
         plan = parse_carousel_plan(

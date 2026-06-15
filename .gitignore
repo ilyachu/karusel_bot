@@ -28,3 +28,15 @@ output/
 
 # Local assets (if generated)
 test_*.png
+
+# Testing and coverage
+.coverage
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Render / temp artifacts
+*.log
+*.db
+*.db-journal
