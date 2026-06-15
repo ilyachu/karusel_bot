@@ -150,11 +150,13 @@ async def generate_cover_plan(base_text: str, style: str, format_key: str) -> di
     }
     fmt_note = format_notes.get(format_key, "")
 
-    prompt = f"""JSON-план обложки. Стиль: {profile}. Формат: {fmt_note}
-{{"headline": "2-6 слов", "subtitle": "5-12 слов или пусто", "eyebrow_left": "РАЗБОР · № 01", "eyebrow_right": "POSTER · TODAY", "footer_left": "ДЛЯ ЧИТАТЕЛЕЙ", "symbol": "arrow|asterisk|slash|dot", "cta_text": "призыв или пусто"}}
-Русский. Одна главная мысль. Не возвращай footer_right.
+    prompt = f"""ЯЗЫК: ВСЕ текстовые поля (headline, subtitle, eyebrow_left, eyebrow_right, footer_left, cta_text) пиши ТОЛЬКО на русском языке. Никакого английского, кроме технических сокращений типа "HTML" или "AI".
 
-Текст: {base_text}"""
+JSON-план обложки. Стиль: {profile}. Формат: {fmt_note}
+{{"headline": "2-6 слов на русском", "subtitle": "5-12 слов на русском или пусто", "eyebrow_left": "РАЗБОР · № 01", "eyebrow_right": "POSTER · TODAY", "footer_left": "ДЛЯ ЧИТАТЕЛЕЙ", "symbol": "arrow|asterisk|slash|dot", "cta_text": "призыв на русском или пусто"}}
+Русский. Одна главная мысль из текста ниже. Не возвращай footer_right.
+
+Текст пользователя: {base_text}"""
 
     try:
         result = await _router_json_request(prompt)
@@ -171,6 +173,52 @@ async def generate_cover_plan(base_text: str, style: str, format_key: str) -> di
 
     plan = normalize_cover_plan(result, base_text, style, format_key).to_dict()
     plan["html_body"] = await generate_cover_html_body(base_text, style, format_key, plan)
+
+    # If source is Russian but plan is in English (LLM ignored the language rule),
+    # translate the plan fields using a quick LLM call.
+    if _is_russian_source(base_text) and _cover_plan_looks_english(plan):
+        logging.warning("Cover plan came back in English despite Russian source — retranslating")
+        plan = await _retranslate_cover_plan_to_russian(plan, base_text, style, format_key)
+
+    return plan
+
+
+def _cover_plan_looks_english(plan: dict) -> bool:
+    """Detect if the LLM-generated cover plan is in English despite Russian source."""
+    text_fields = [
+        str(plan.get("headline", "")),
+        str(plan.get("subtitle", "")),
+        str(plan.get("eyebrow_left", "")),
+        str(plan.get("eyebrow_right", "")),
+        str(plan.get("footer_left", "")),
+        str(plan.get("cta_text", "")),
+    ]
+    combined = " ".join(text_fields)
+    return _looks_english_heavy(combined)
+
+
+async def _retranslate_cover_plan_to_russian(
+    plan: dict, base_text: str, style: str, format_key: str
+) -> dict:
+    """Force-translate an English cover plan into Russian via a dedicated LLM call."""
+    prompt = f"""Переведи значения JSON на русский язык. Сохрани смысл, длину и стиль обложки ({style}, {format_key}). Верни ТОЛЬКО валидный JSON без пояснений.
+
+Исходный JSON: {json.dumps(plan, ensure_ascii=False)}
+
+JSON с переведёнными значениями (на русском):"""
+    for requester in (_router_json_request, _openai_json_request):
+        try:
+            translated = await requester(prompt)
+            if isinstance(translated, dict):
+                # Merge translations back, keeping keys we know about
+                for key in ("headline", "subtitle", "eyebrow_left", "eyebrow_right",
+                            "footer_left", "cta_text", "symbol"):
+                    if key in translated and translated[key]:
+                        plan[key] = translated[key]
+                return plan
+        except Exception as exc:
+            logging.error("Cover retranslation failed via %s: %s", requester.__name__, exc)
+            continue
     return plan
 
 
@@ -419,7 +467,14 @@ async def _router_json_request(prompt: str) -> dict:
     response = await llm_client.chat.completions.create(
         model=DEFAULT_MODEL,
         messages=[
-            {"role": "system", "content": "Return valid JSON only. No markdown fences, no explanation."},
+            {
+                "role": "system",
+                "content": (
+                    "Return valid JSON only. No markdown fences, no explanation. "
+                    "ВАЖНО: все текстовые значения (headline, subtitle, body, и т.д.) "
+                    "должны быть написаны на русском языке, если в prompt не указан другой язык."
+                ),
+            },
             {"role": "user", "content": prompt},
         ],
         response_format={"type": "json_object"},
@@ -456,7 +511,14 @@ async def _openai_json_request(prompt: str) -> dict:
             response = await client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "Return valid JSON only. No markdown fences, no explanation."},
+                    {
+                        "role": "system",
+                        "content": (
+                            "Return valid JSON only. No markdown fences, no explanation. "
+                            "ВАЖНО: все текстовые значения (headline, subtitle, body, и т.д.) "
+                            "должны быть написаны на русском языке, если в prompt не указан другой язык."
+                        ),
+                    },
                     {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
