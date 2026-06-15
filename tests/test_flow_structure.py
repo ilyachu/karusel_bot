@@ -162,6 +162,49 @@ class FlowStructureTests(unittest.TestCase):
         self.assertIn("Автор: {plan.footer_right}", source)
         self.assertNotIn("Автор: chu_il", source)
 
+    def test_cover_flow_exposes_text_mode_step(self):
+        source = (PROJECT_ROOT / "handlers" / "cover_flow.py").read_text(encoding="utf-8")
+        states_source = (PROJECT_ROOT / "utils" / "states.py").read_text(encoding="utf-8")
+
+        self.assertIn("cover_choosing_text_mode", states_source)
+        self.assertIn("COVER_TEXT_MODE_LABELS", source)
+        self.assertIn("cover_text_mode:exact", source)
+        self.assertIn("cover_text_mode:marketing", source)
+        self.assertIn("cover_text_mode:educational", source)
+        self.assertIn("cover_text_mode:concise", source)
+        self.assertIn("cover_text_mode=text_mode", source)
+        self.assertIn("generate_cover_plan(base_text, style, format_key, text_mode)", source)
+        self.assertIn("Текст: {COVER_TEXT_MODE_LABELS.get(text_mode", source)
+
+    def test_cover_text_mode_keyboard_contains_product_labels(self):
+        from handlers.cover_flow import COVER_TEXT_MODE_LABELS, _text_mode_keyboard
+
+        keyboard = _text_mode_keyboard()
+        labels = [
+            button.text
+            for row in keyboard.inline_keyboard
+            for button in row
+        ]
+
+        self.assertEqual(COVER_TEXT_MODE_LABELS["exact"], "Сохранить исходный")
+        self.assertEqual(COVER_TEXT_MODE_LABELS["marketing"], "Продающий")
+        self.assertEqual(COVER_TEXT_MODE_LABELS["educational"], "Обучающий")
+        self.assertEqual(COVER_TEXT_MODE_LABELS["concise"], "Кратко суть")
+        self.assertIn("Сохранить исходный", labels)
+        self.assertIn("Продающий", labels)
+        self.assertIn("Обучающий", labels)
+        self.assertIn("Кратко суть", labels)
+
+    def test_cover_plan_prompt_accepts_text_mode(self):
+        source = (PROJECT_ROOT / "services" / "gemini_client.py").read_text(encoding="utf-8")
+
+        self.assertIn('generate_cover_plan(base_text: str, style: str, format_key: str, text_mode: str = "concise")', source)
+        self.assertIn("text_mode_instructions", source)
+        self.assertIn("СОХРАНИТЬ ИСХОДНЫЙ", source)
+        self.assertIn("ПРОДАЮЩИЙ", source)
+        self.assertIn("ОБУЧАЮЩИЙ", source)
+        self.assertIn("КРАТКО СУТЬ", source)
+
     def test_custom_background_disables_ai_html_renderer(self):
         source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
 

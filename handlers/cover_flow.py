@@ -22,6 +22,14 @@ from utils.validation import validate_file_size, validate_text_length
 router = Router()
 
 
+COVER_TEXT_MODE_LABELS = {
+    "exact": "Сохранить исходный",
+    "marketing": "Продающий",
+    "educational": "Обучающий",
+    "concise": "Кратко суть",
+}
+
+
 def _resolve_user_logo_for_cover_event(event: types.Message | types.CallbackQuery) -> str:
     user_id = event.from_user.id if event.from_user else 0
     return get_user_logo(user_id)
@@ -50,8 +58,22 @@ async def cover_text_received(message: types.Message, state: FSMContext):
         await message.answer(error_msg)
         return
     await state.update_data(cover_text=message.text)
-    await state.set_state(CarouselFlow.cover_choosing_format)
+    await state.set_state(CarouselFlow.cover_choosing_text_mode)
     await message.answer(
+        "Как обработать текст для обложки?",
+        reply_markup=_text_mode_keyboard(),
+    )
+
+
+@router.callback_query(CarouselFlow.cover_choosing_text_mode, F.data.startswith("cover_text_mode:"))
+async def cover_text_mode_selected(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    text_mode = callback.data.split(":", 1)[1]
+    if text_mode not in COVER_TEXT_MODE_LABELS:
+        text_mode = "concise"
+    await state.update_data(cover_text_mode=text_mode)
+    await state.set_state(CarouselFlow.cover_choosing_format)
+    await callback.message.edit_text(
         "Сначала выберите формат обложки.\n\n"
         "4:5 — основной Instagram feed. 16:9 — широкая для Telegram, сайта, YouTube. 9:16 — stories/reels.",
         reply_markup=_format_keyboard(),
@@ -67,11 +89,13 @@ async def cover_style_selected(callback: types.CallbackQuery, state: FSMContext)
     data = await state.get_data()
     format_key = data.get("cover_format_key", "post")
     base_text = data.get("cover_text", "")
+    text_mode = data.get("cover_text_mode", "concise")
     background_data_url = data.get("cover_background_data_url", "")
     await state.update_data(
         cover_style=style,
         cover_format_key=format_key,
         cover_text=base_text,
+        cover_text_mode=text_mode,
         cover_background_data_url=background_data_url,
     )
     await state.set_state(CarouselFlow.cover_processing)
@@ -79,7 +103,7 @@ async def cover_style_selected(callback: types.CallbackQuery, state: FSMContext)
 
     try:
         user_logo = _resolve_user_logo_for_cover_event(callback)
-        raw_plan = await generate_cover_plan(base_text, style, format_key)
+        raw_plan = await generate_cover_plan(base_text, style, format_key, text_mode)
         raw_plan["background_data_url"] = background_data_url
         raw_plan["footer_right"] = user_logo
         plan = CoverPlan(**raw_plan)
@@ -106,6 +130,7 @@ async def cover_style_selected(callback: types.CallbackQuery, state: FSMContext)
             "🖼 Обложка готова\n"
             f"Стиль: {COVER_STYLES[plan.style]['label']}\n"
             f"Формат: {COVER_FORMATS[plan.format_key]['label']}\n"
+            f"Текст: {COVER_TEXT_MODE_LABELS.get(text_mode, 'Кратко суть')}\n"
             f"Фон: {'свой' if plan.background_data_url else 'стандартный'}\n"
             f"Автор: {plan.footer_right}"
         ),
@@ -214,6 +239,19 @@ def _style_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _text_mode_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=COVER_TEXT_MODE_LABELS["exact"], callback_data="cover_text_mode:exact")],
+            [
+                InlineKeyboardButton(text=COVER_TEXT_MODE_LABELS["marketing"], callback_data="cover_text_mode:marketing"),
+                InlineKeyboardButton(text=COVER_TEXT_MODE_LABELS["educational"], callback_data="cover_text_mode:educational"),
+            ],
+            [InlineKeyboardButton(text=COVER_TEXT_MODE_LABELS["concise"], callback_data="cover_text_mode:concise")],
+        ]
+    )
+
+
 def _background_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -240,13 +278,14 @@ async def cover_regenerate(callback: types.CallbackQuery, state: FSMContext):
     style = data.get("cover_style", "orange_poster")
     format_key = data.get("cover_format_key", "post")
     base_text = data.get("cover_text", "")
+    text_mode = data.get("cover_text_mode", "concise")
     background_data_url = data.get("cover_background_data_url", "")
     await state.set_state(CarouselFlow.cover_processing)
     status = await callback.message.answer("🎨 Генерирую другой вариант...")
 
     try:
         user_logo = _resolve_user_logo_for_cover_event(callback)
-        raw_plan = await generate_cover_plan(base_text, style, format_key)
+        raw_plan = await generate_cover_plan(base_text, style, format_key, text_mode)
         raw_plan["background_data_url"] = background_data_url
         raw_plan["footer_right"] = user_logo
         plan = CoverPlan(**raw_plan)
@@ -274,6 +313,7 @@ async def cover_regenerate(callback: types.CallbackQuery, state: FSMContext):
             "🖼 Обложка готова\n"
             f"Стиль: {COVER_STYLES[plan.style]['label']}\n"
             f"Формат: {COVER_FORMATS[plan.format_key]['label']}\n"
+            f"Текст: {COVER_TEXT_MODE_LABELS.get(text_mode, 'Кратко суть')}\n"
             f"Фон: {'свой' if plan.background_data_url else 'стандартный'}\n"
             f"Автор: {plan.footer_right}"
         ),

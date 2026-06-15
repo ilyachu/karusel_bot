@@ -128,7 +128,7 @@ async def generate_threads_summary(base_text: str, slides_content: list[dict], c
         return ""
 
 
-async def generate_cover_plan(base_text: str, style: str, format_key: str) -> dict:
+async def generate_cover_plan(base_text: str, style: str, format_key: str, text_mode: str = "concise") -> dict:
     style_profiles = {
         "orange_poster": "Крупный техно-плакат. Headline 3-5 слов, можно RU/EN смесь. Энергия, дерзость, минимум текста.",
         "acid_poster": "Кислотный плакат. Headline 2-4 слова, яркая формулировка. Панк-энергия, контраст.",
@@ -143,6 +143,14 @@ async def generate_cover_plan(base_text: str, style: str, format_key: str) -> di
     }
     profile = style_profiles.get(style, style_profiles["orange_poster"])
 
+    text_mode_instructions = {
+        "exact": "Режим текста: СОХРАНИТЬ ИСХОДНЫЙ. Максимально сохрани смысл и ключевые формулировки пользователя, только сожми до формата обложки.",
+        "marketing": "Режим текста: ПРОДАЮЩИЙ. Сделай headline убедительным и цепляющим, но без дешёвого кликбейта, обещаний без доказательств и рекламной шелухи.",
+        "educational": "Режим текста: ОБУЧАЮЩИЙ. Сформулируй как полезный мини-разбор: ясно, объясняюще, с акцентом на пользу или урок.",
+        "concise": "Режим текста: КРАТКО СУТЬ. Вытащи одну главную мысль и сформулируй максимально коротко, без воды и повторов.",
+    }
+    text_mode_instruction = text_mode_instructions.get(text_mode, text_mode_instructions["concise"])
+
     format_notes = {
         "wide": "Широкий формат 16:9 — headline может быть длиннее, 3-6 слов.",
         "post": "Вертикаль 4:5 — headline 2-5 слов, компактно.",
@@ -153,6 +161,7 @@ async def generate_cover_plan(base_text: str, style: str, format_key: str) -> di
     prompt = f"""ЯЗЫК: ВСЕ текстовые поля (headline, subtitle, eyebrow_left, eyebrow_right, footer_left, cta_text) пиши ТОЛЬКО на русском языке. Никакого английского, кроме технических сокращений типа "HTML" или "AI".
 
 JSON-план обложки. Стиль: {profile}. Формат: {fmt_note}
+{text_mode_instruction}
 {{"headline": "2-6 слов на русском", "subtitle": "5-12 слов на русском или пусто", "eyebrow_left": "РАЗБОР · № 01", "eyebrow_right": "POSTER · TODAY", "footer_left": "ДЛЯ ЧИТАТЕЛЕЙ", "symbol": "arrow|asterisk|slash|dot", "cta_text": "призыв на русском или пусто"}}
 Русский. Одна главная мысль из текста ниже. Не возвращай footer_right.
 
