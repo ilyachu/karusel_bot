@@ -36,6 +36,25 @@ class FlowStructureTests(unittest.TestCase):
         self.assertNotIn("choosing_slide_count", source)
         self.assertNotIn("choosing_rewrite_style", source)
 
+    def test_feedback_button_is_in_main_menu(self):
+        source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
+        self.assertIn('KeyboardButton(text="📬 Обратная связь")', source)
+
+    def test_feedback_state_exists(self):
+        from handlers.common import Feedback
+        self.assertEqual(Feedback.waiting_for_message.state, "Feedback:waiting_for_message")
+
+    def test_feedback_handler_forwards_to_admin(self):
+        source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
+        self.assertIn("async def cmd_feedback_start", source)
+        self.assertIn("async def cmd_feedback_receive", source)
+        self.assertIn("bot.send_message(ADMIN_ID", source)
+
+    def test_access_middleware_allows_feedback_for_all(self):
+        source = (PROJECT_ROOT / "middlewares" / "access.py").read_text(encoding="utf-8")
+        self.assertIn("Feedback.waiting_for_message", source)
+        self.assertIn("current_state == Feedback.waiting_for_message", source)
+
     def test_create_carousel_uses_insta_auto_setup(self):
         source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
 
@@ -44,7 +63,11 @@ class FlowStructureTests(unittest.TestCase):
         self.assertIn("start_insta_creation_setup(", source)
 
     def test_insta_auto_style_packs_are_product_facing(self):
-        from handlers.common import INSTA_REWRITE_LABELS, INSTA_COLOR_LABELS
+        from handlers.common import (
+            INSTA_COLOR_LABELS,
+            INSTA_REWRITE_LABELS,
+            INSTA_SLIDE_COUNT_LABELS,
+        )
 
         self.assertIn("exact", INSTA_REWRITE_LABELS)
         self.assertIn("concise", INSTA_REWRITE_LABELS)
@@ -54,6 +77,48 @@ class FlowStructureTests(unittest.TestCase):
         self.assertIn("light", INSTA_COLOR_LABELS)
         self.assertIn("warm", INSTA_COLOR_LABELS)
         self.assertIn("bold", INSTA_COLOR_LABELS)
+        self.assertEqual(INSTA_SLIDE_COUNT_LABELS["auto"], "Авто")
+        self.assertEqual(INSTA_SLIDE_COUNT_LABELS["7"], "7")
+
+    def test_insta_setup_exposes_slide_count_and_background_mode(self):
+        from handlers.common import _build_insta_setup_keyboard, _insta_setup_summary
+
+        data = {
+            "insta_slide_count": "6",
+            "insta_custom_bg_bytes": b"demo",
+        }
+
+        summary = _insta_setup_summary(data)
+        keyboard = _build_insta_setup_keyboard(data)
+        callback_ids = [
+            button.callback_data
+            for row in keyboard.inline_keyboard
+            for button in row
+            if button.callback_data
+        ]
+
+        self.assertIn("Слайды: 6", summary)
+        self.assertIn("Фон: свой загружен", summary)
+        self.assertIn("insta_slides:auto", callback_ids)
+        self.assertIn("insta_slides:4", callback_ids)
+        self.assertIn("insta_slides:7", callback_ids)
+
+    def test_target_slide_count_can_be_forced_from_setup(self):
+        from handlers.common import resolve_target_slide_count
+
+        short_text = "Короткий текст для проверки ручного числа слайдов."
+
+        self.assertEqual(resolve_target_slide_count(short_text, "6"), 6)
+        self.assertEqual(resolve_target_slide_count(short_text, "auto"), 4)
+
+    def test_pipeline_progress_text_is_staged(self):
+        from handlers.carousel_flow import _build_pipeline_status
+
+        status = _build_pipeline_status(2, 5, "Собираю структуру", "Слайды и порядок блоков")
+
+        self.assertIn("Шаг 2/5", status)
+        self.assertIn("Собираю структуру", status)
+        self.assertIn("Слайды и порядок блоков", status)
 
     def test_cover_flow_explains_wide_format_as_cross_posting(self):
         source = (PROJECT_ROOT / "handlers" / "cover_flow.py").read_text(encoding="utf-8")

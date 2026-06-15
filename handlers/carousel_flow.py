@@ -73,10 +73,22 @@ from services.openai_speech import transcribe_voice
 from services.image_renderer import render_layout_spec
 from handlers.common import (
     INSTA_REWRITE_LABELS,
+    resolve_target_slide_count,
     show_insta_auto_setup,
 )
 
 router = Router()
+
+
+def _build_pipeline_status(step: int, total_steps: int, title: str, detail: str = "") -> str:
+    lines = [
+        "⏳ Генерация карусели",
+        "",
+        f"Шаг {step}/{total_steps}: {title}",
+    ]
+    if detail:
+        lines.append(detail)
+    return "\n".join(lines)
 
 # --- 1. Input Handling ---
 
@@ -248,14 +260,28 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         return
 
     await state.update_data(base_text=text)
-    status = await message.answer("🚀 Собираю карусель...")
-    await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
     data = await state.get_data()
+    target_slides = resolve_target_slide_count(text, data.get("insta_slide_count", "auto"))
+    custom_bg_selected = bool(data.get("insta_custom_bg_bytes"))
+    status = await message.answer(
+        _build_pipeline_status(
+            1,
+            5,
+            "Собираю структуру",
+            f"Планирую {target_slides} слайдов" + (" со своим фоном." if custom_bg_selected else "."),
+        )
+    )
+    await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
     rewrite_style = data.get("insta_rewrite_style", "concise")
 
-    word_count = len(text.split())
-    target_slides = max(4, min(7, word_count // 15 + 2))
-
+    await status.edit_text(
+        _build_pipeline_status(
+            2,
+            5,
+            "Генерирую тексты",
+            "Собираю план карусели и раскладываю материал по слайдам.",
+        )
+    )
     raw_plan = await generate_instagram_carousel_plan(
         text,
         target_slides,
@@ -317,7 +343,14 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         layout_style=layout_style,
     )
 
-    await status.edit_text("✍️ Генерирую подпись...")
+    await status.edit_text(
+        _build_pipeline_status(
+            3,
+            5,
+            "Генерирую подпись",
+            "Подготавливаю caption для публикации.",
+        )
+    )
     caption = await generate_instagram_caption(text, slides_content)
     threads_summary = ""
     user_logo = get_user_logo(message.chat.id)
@@ -327,7 +360,14 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
     custom_background_data_url = image_bytes_to_data_url(custom_bg_bytes, custom_bg_mime_type) if custom_bg_bytes else ""
     logging.info(f"Custom background: bytes={len(custom_bg_bytes) if custom_bg_bytes else 0}, mime={custom_bg_mime_type}, data_url_len={len(custom_background_data_url)}")
 
-    await status.edit_text("🎨 Рендерю слайды...")
+    await status.edit_text(
+        _build_pipeline_status(
+            4,
+            5,
+            "Рендерю слайды",
+            "Собираю финальные изображения 1080×1350.",
+        )
+    )
     rendered_buffers: list[BytesIO] = []
     media_group = []
     render_mode = "html"
@@ -353,6 +393,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
                     layout_spec,
                     user_logo,
                     custom_background_data_url,
+                    "strong",
                 )
             except Exception as exc:
                 logging.warning("HTML renderer unavailable for custom background, falling back to Pillow: %s", exc)
@@ -372,6 +413,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
                     layout_spec,
                     user_logo,
                     preset_background_data_url,
+                    "strong",
                 )
             except Exception as exc:
                 logging.warning("HTML renderer unavailable, falling back to Pillow: %s", exc)
@@ -425,6 +467,14 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         render_mode=render_mode,
     )
 
+    await status.edit_text(
+        _build_pipeline_status(
+            5,
+            5,
+            "Готовлю выдачу",
+            "Сохраняю экспорт и отправляю карусель в чат.",
+        )
+    )
     await status.delete()
     sent_messages = await message.answer_media_group(media_group)
     telegram_media_items = []
@@ -454,6 +504,13 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             [InlineKeyboardButton(text="🛰 Advanced Meta plan", callback_data=f"meta_prepare:{export_id}")]
         )
     actions = InlineKeyboardMarkup(inline_keyboard=action_rows) if action_rows else None
+    unique_presets = list(dict.fromkeys(preset_background_ids))
+    if custom_bg_bytes:
+        background_label = "свой загруженный"
+    elif unique_presets:
+        background_label = "авто-пресеты бота"
+    else:
+        background_label = "без отдельного фонового изображения"
 
     caption_preview = caption if len(caption) <= 1200 else caption[:1200] + "..."
     await message.answer(
@@ -461,14 +518,14 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         f"Слайдов: {len(slides_content)}\n"
         f"Подача текста: {INSTA_REWRITE_LABELS.get(rewrite_style, 'Коротко и ясно')}\n"
         f"Стиль: {LAYOUT_STYLE_LABELS.get(layout_style, layout_style)}\n"
-        f"Визуал: {VISUAL_MODE_LABELS.get(visual_decision.resolved_mode, visual_decision.resolved_mode)}"
-        f"{' + свой фон' if custom_bg_bytes else ''}\n"
+        f"Визуал: {VISUAL_MODE_LABELS.get(visual_decision.resolved_mode, visual_decision.resolved_mode)}\n"
+        f"Фон: {background_label}\n"
         f"Рендер: {render_mode}\n"
         f"Экспорт: {export_id}\n\n"
         f"Подпись:\n{caption_preview}",
         reply_markup=actions,
     )
-    if render_mode != "html":
+    if render_mode != "html" and not custom_bg_bytes:
         human_reason = "HTML-рендер недоступен в текущем контейнере."
         if "playwright" in fallback_reason.lower() or "chromium" in fallback_reason.lower():
             human_reason = "Chromium/Playwright недоступен в контейнере."

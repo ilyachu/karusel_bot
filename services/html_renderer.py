@@ -178,6 +178,7 @@ def _build_ai_slide_html(
         if safe_bg
         else ""
     )
+    stage_background_css = "background: transparent !important;" if safe_bg else ""
     background_css = f"""
     .ai-custom-bg {{
       position: absolute;
@@ -216,6 +217,7 @@ def _build_ai_slide_html(
       flex-direction: column;
       justify-content: space-between;
       gap: 24px;
+      {stage_background_css}
     }}
   </style>
 </head>

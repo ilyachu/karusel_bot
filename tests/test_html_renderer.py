@@ -183,6 +183,7 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertIn("min-height: 100%", html)
         self.assertIn("ai-texture", html)
         self.assertIn(data_url, html)
+        self.assertIn("background: transparent !important", html)
         self.assertNotIn("Шаблонный заголовок", html)
         # When custom bg is provided, it must remain visible — no grayscale desaturation
         self.assertNotIn("grayscale", html)

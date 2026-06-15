@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from aiogram import Router, types, F
+from aiogram import Router, types, F, Bot
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -15,6 +15,11 @@ from config import ADMIN_ID
 
 class Settings(StatesGroup):
     waiting_for_logo = State()
+
+
+class Feedback(StatesGroup):
+    waiting_for_message = State()
+
 
 router = Router()
 
@@ -52,13 +57,30 @@ INSTA_COLOR_DESCRIPTIONS = {
     "bold": "яркие контрастные цвета, смелый стиль",
 }
 
+INSTA_SLIDE_COUNT_LABELS = {
+    "auto": "Авто",
+    "4": "4",
+    "5": "5",
+    "6": "6",
+    "7": "7",
+}
+
 INSTA_CARD_SIZE_LABEL = "1080×1350, вертикаль 4:5"
+
+
+def resolve_target_slide_count(text: str, slide_count_setting: str = "auto") -> int:
+    if slide_count_setting in {"4", "5", "6", "7"}:
+        return int(slide_count_setting)
+
+    word_count = len((text or "").split())
+    return max(4, min(7, word_count // 15 + 2))
 
 
 def _insta_setup_summary(data: dict) -> str:
     layout_style = data.get("insta_layout_style", "auto")
     color_key = data.get("insta_color_palette", "auto")
     rewrite_style = data.get("insta_rewrite_style", "concise")
+    slide_count = data.get("insta_slide_count", "auto")
     custom_bg = data.get("insta_custom_bg_bytes")
 
     style_label = LAYOUT_STYLE_LABELS.get(layout_style, "Авто")
@@ -67,14 +89,17 @@ def _insta_setup_summary(data: dict) -> str:
     color_label = INSTA_COLOR_LABELS.get(color_key, "Авто")
     color_desc = INSTA_COLOR_DESCRIPTIONS.get(color_key, "")
     rewrite_label = INSTA_REWRITE_LABELS.get(rewrite_style, "Короче")
+    slide_count_label = INSTA_SLIDE_COUNT_LABELS.get(slide_count, "Авто")
+    background_label = "свой загружен" if custom_bg else "авто из коллекции бота"
 
     return (
         "Карусель\n\n"
-        "Настройте 3 параметра и отправьте текст:\n\n"
+        "Настройте параметры и отправьте текст:\n\n"
         f"Стиль: {style_label}\n"
         f"Палитра: {color_label} — {color_desc}\n"
         f"Текст: {rewrite_label}\n"
-        f"{'Фон: свой загружен\n' if custom_bg else ''}"
+        f"Слайды: {slide_count_label}\n"
+        f"Фон: {background_label}\n"
         f"Размер: {INSTA_CARD_SIZE_LABEL}"
     )
 
@@ -84,6 +109,7 @@ def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarku
     layout_style = data.get("insta_layout_style", "auto")
     color_key = data.get("insta_color_palette", "auto")
     rewrite_style = data.get("insta_rewrite_style", "concise")
+    slide_count = data.get("insta_slide_count", "auto")
     custom_bg = data.get("insta_custom_bg_bytes")
 
     def section(title: str) -> list[InlineKeyboardButton]:
@@ -119,6 +145,15 @@ def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarku
         text_btns.append(InlineKeyboardButton(text=label, callback_data=f"insta_copy:{key}"))
     text_rows.extend([text_btns[:2], text_btns[2:]])
 
+    slide_rows = [section("Слайды")]
+    slide_btns = []
+    for key in ("auto", "4", "5", "6", "7"):
+        label = INSTA_SLIDE_COUNT_LABELS[key]
+        if key == slide_count:
+            label = f"✅ {label}"
+        slide_btns.append(InlineKeyboardButton(text=label, callback_data=f"insta_slides:{key}"))
+    slide_rows.extend([slide_btns[:3], slide_btns[3:]])
+
     # Дополнительно
     custom_label = "Свой фон: выбран" if custom_bg else "Загрузить свой фон"
     extra_rows = [
@@ -127,7 +162,7 @@ def _build_insta_setup_keyboard(data: dict | None = None) -> InlineKeyboardMarku
     ]
 
     return InlineKeyboardMarkup(
-        inline_keyboard=[*style_rows, *color_rows, *text_rows, *extra_rows]
+        inline_keyboard=[*style_rows, *color_rows, *text_rows, *slide_rows, *extra_rows]
     )
 
 
@@ -152,9 +187,12 @@ async def start_insta_creation_setup(
         insta_rewrite_style="concise",
         insta_color_palette="auto",
         insta_layout_style="auto",
+        insta_slide_count="auto",
         insta_theme_override="auto",
         insta_visual_mode="auto",
         insta_card_format="auto",
+        insta_custom_bg_bytes=None,
+        insta_custom_bg_mime_type="image/jpeg",
     )
     await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
     if intro:
@@ -169,6 +207,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         [KeyboardButton(text="🚀 Insta Auto")],
         [KeyboardButton(text="🖼 Обложка")],
         [KeyboardButton(text="🎨 Настройки логотипа")],
+        [KeyboardButton(text="📬 Обратная связь")],
         [KeyboardButton(text="Помощь")]
     ]
     if message.from_user.id == ADMIN_ID:
@@ -223,7 +262,6 @@ async def insta_color_selected(callback: types.CallbackQuery, state: FSMContext)
     await state.update_data(
         insta_color_palette=color_key,
         insta_theme_override=theme,
-        insta_custom_bg_bytes=None,
     )
     await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
     await show_insta_auto_setup(callback.message, state, edit=True)
@@ -239,6 +277,20 @@ async def insta_copy_selected(callback: types.CallbackQuery, state: FSMContext):
     if rewrite_style not in INSTA_REWRITE_LABELS:
         return
     await state.update_data(insta_rewrite_style=rewrite_style)
+    await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
+    await show_insta_auto_setup(callback.message, state, edit=True)
+
+
+@router.callback_query(
+    StateFilter(CarouselFlow.insta_auto_waiting_for_text, CarouselFlow.insta_auto_waiting_for_background),
+    F.data.startswith("insta_slides:"),
+)
+async def insta_slide_count_selected(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    slide_count = callback.data.split(":", 1)[1]
+    if slide_count not in INSTA_SLIDE_COUNT_LABELS:
+        return
+    await state.update_data(insta_slide_count=slide_count)
     await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
     await show_insta_auto_setup(callback.message, state, edit=True)
 
@@ -278,10 +330,12 @@ async def insta_reset_setup(callback: types.CallbackQuery, state: FSMContext):
         insta_rewrite_style="concise",
         insta_color_palette="auto",
         insta_layout_style="auto",
+        insta_slide_count="auto",
         insta_theme_override="auto",
         insta_visual_mode="auto",
         insta_card_format="auto",
         insta_custom_bg_bytes=None,
+        insta_custom_bg_mime_type="image/jpeg",
     )
     await state.set_state(CarouselFlow.insta_auto_waiting_for_text)
     await show_insta_auto_setup(callback.message, state, edit=True)
@@ -342,6 +396,30 @@ async def settings_save_logo(message: types.Message, state: FSMContext):
     set_user_logo(message.from_user.id, new_logo)
     await state.clear()
     await message.answer(f"✅ Логотип изменен на: `{new_logo}`")
+
+
+@router.message(F.text == "📬 Обратная связь")
+async def cmd_feedback_start(message: types.Message, state: FSMContext):
+    await state.set_state(Feedback.waiting_for_message)
+    await message.answer(
+        "Напишите ваше сообщение, предложение или баг-репорт. Я передам разработчику."
+    )
+
+
+@router.message(Feedback.waiting_for_message)
+async def cmd_feedback_receive(message: types.Message, state: FSMContext, bot: Bot):
+    user = message.from_user
+    username = f"@{user.username}" if user.username else "без username"
+    admin_text = (
+        f"📬 Обратная связь от {username} (ID: {user.id})\n\n"
+        f"{message.text}"
+    )
+    try:
+        await bot.send_message(ADMIN_ID, admin_text)
+    except Exception as exc:
+        logging.warning("Failed to forward feedback to admin %s: %s", ADMIN_ID, exc)
+    await state.clear()
+    await message.answer("✅ Спасибо! Ваше сообщение передано разработчику.")
 
 
 @router.message(Command("help"))
