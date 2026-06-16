@@ -12,3 +12,15 @@ class CarouselFlow(StatesGroup):
     cover_choosing_format = State()
     cover_processing = State()
     insta_cover_waiting_for_text = State()
+
+
+class TestRenderFlow(StatesGroup):
+    """Mini-FSM for the admin-only experimental-render entry point.
+
+    Triggered by the main-menu button '🧪 Тестовый рендер' or the
+    '/test_render' command. Stays in this state until the admin sends
+    /start or a new top-level command.
+    """
+
+    waiting_for_text = State()
+    waiting_for_style = State()

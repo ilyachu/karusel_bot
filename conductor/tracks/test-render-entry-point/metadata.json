@@ -1,0 +1,38 @@
+{
+  "track_id": "test-render-entry-point",
+  "title": "Separate 🧪 Тестовый рендер entry point in main menu with its own mini-FSM",
+  "status": "approved",
+  "approved_at": "2026-06-16",
+  "updated_at": "2026-06-16",
+  "owner": "conductor",
+  "depends_on": "exp-renderer-style-system (must be deployed as baseline)",
+  "decisions": {
+    "entry_point": "🧪 Тестовый рендер button in main menu (admin only) + /test_render command shortcut",
+    "fsm_state": "TestRenderFlow.waiting_for_text in utils/states.py",
+    "reuses_pipeline": "same LLM plan generation (generate_instagram_carousel_plan -> parse_carousel_plan -> enforce_default_cta_slide -> apply_theme_selection_policy -> apply_theme_override -> build_instagram_layout_specs)",
+    "skip_production_render": "yes; test flow does not call render_layout_spec_html or render_layout_spec",
+    "skip_export_persistence": "yes; test renders are ephemeral, no export_packages row created",
+    "removes_inline_buttons": "yes; three 🧪 buttons are removed from run_insta_auto_pipeline result message to avoid duplication",
+    "style_callback": "test_render_style:<style_id> with 3-segment form like before; unknown style_id returns friendly error",
+    "backgrounds": "v1 passes empty custom_background_data_url; custom-background upload deferred to v2"
+  },
+  "files_to_create": [],
+  "files_to_modify": [
+    "utils/states.py",
+    "handlers/common.py",
+    "handlers/carousel_flow.py",
+    "tests/test_flow_structure.py"
+  ],
+  "files_preserved_uncommitted": [
+    "services/html_renderer.py",
+    "tests/test_html_renderer.py"
+  ],
+  "out_of_scope": [
+    "production deploy (only after explicit user 'go')",
+    "custom background upload in test-render",
+    "saving test renders as proper export packages",
+    "cover_renderer changes",
+    "removing readability fix"
+  ],
+  "next_step": "running conductor_implement (tasks 1..7) then deploy"
+}

@@ -211,6 +211,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         [KeyboardButton(text="Помощь")]
     ]
     if message.from_user.id == ADMIN_ID:
+        kb.append([KeyboardButton(text="🧪 Тестовый рендер")])
         kb.append([KeyboardButton(text="/admin")])
     keyboard = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
     await message.answer(
@@ -218,6 +219,22 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "Отправь мне текст, голосовое сообщение или перешли пост, и я превращу это в слайды.",
         reply_markup=keyboard
     )
+
+
+@router.message(Command("test_render"))
+async def cmd_test_render_command(message: types.Message, state: FSMContext):
+    """Admin-only command shortcut for the experimental renderer."""
+    from handlers.carousel_flow import cmd_test_render
+
+    await cmd_test_render(message, state)
+
+
+@router.message(F.text == "🧪 Тестовый рендер")
+async def cmd_test_render_menu(message: types.Message, state: FSMContext):
+    """Main-menu entry to the experimental renderer (admin only)."""
+    from handlers.carousel_flow import cmd_test_render
+
+    await cmd_test_render(message, state)
 
 
 @router.message(F.text == "🚀 Insta Auto")

@@ -275,28 +275,28 @@ class FlowStructureTests(unittest.TestCase):
                 f"services.experimental_carousel_renderer must export {symbol}",
             )
 
-    def test_experimental_render_button_is_in_admin_block(self):
+    def test_insta_auto_result_has_no_test_render_buttons(self):
+        """The three test-render style buttons must NOT appear in the
+        ``run_insta_auto_pipeline`` result message. They live in the
+        test-render mini-FSM now (track: test-render-entry-point).
+        """
+
         source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
-
-        # The button text and callback prefix must both exist in source.
+        start = source.find("async def run_insta_auto_pipeline")
+        end = source.find(
+            '@router.callback_query(F.data.startswith("meta_prepare:")', start
+        )
+        self.assertNotEqual(start, -1)
+        self.assertNotEqual(end, -1)
+        block = source[start:end]
         for label in ("🧪 Dark+Teal", "🧪 Paper+Orange", "🧪 White+Coral"):
-            self.assertIn(f'"{label}"', source)
-
-        # And the button rows must live inside the admin gate, not as
-        # top-level rows visible to all users.
-        admin_gate_marker = "if message.from_user and message.from_user.id == ADMIN_ID:"
-        admin_start = source.find(admin_gate_marker)
-        self.assertNotEqual(admin_start, -1, "Admin gate not found in carousel_flow.py")
-
-        # The block ends right before the assignment of `actions`.
-        actions_marker = "actions = InlineKeyboardMarkup(inline_keyboard=action_rows)"
-        actions_pos = source.find(actions_marker, admin_start)
-        self.assertNotEqual(actions_pos, -1)
-
-        block = source[admin_start:actions_pos]
-        for label in ("🧪 Dark+Teal", "🧪 Paper+Orange", "🧪 White+Coral"):
-            self.assertIn(f'"{label}"', block)
-        self.assertIn("carousel_exp_render:", block)
+            self.assertNotIn(label, block)
+        for callback in (
+            "carousel_exp_render:{export_id}:dark_teal",
+            "carousel_exp_render:{export_id}:paper_orange",
+            "carousel_exp_render:{export_id}:white_coral",
+        ):
+            self.assertNotIn(callback, block)
 
     def test_experimental_render_callback_handler_exists(self):
         source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
@@ -342,34 +342,86 @@ class FlowStructureTests(unittest.TestCase):
     # Experimental style-system track (exp-renderer-style-system)
     # ------------------------------------------------------------------
 
-    def test_three_experimental_style_buttons_exist(self):
+    def _insta_auto_block(self) -> str:
+        """Return the source of run_insta_auto_pipeline.
+
+        Tracked separately because the test-render entry point (track 3)
+        moved the three style buttons out of this function.
+        """
         source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        start = source.find("async def run_insta_auto_pipeline")
+        self.assertNotEqual(start, -1, "run_insta_auto_pipeline not found")
+        # The block ends at the next top-level @router.callback_query decorator.
+        end = source.find('@router.callback_query(F.data.startswith("meta_prepare:")', start)
+        if end == -1:
+            # Fallback: stop at the first "@router.callback_query" after start.
+            end = source.find("@router.callback_query", start)
+        self.assertNotEqual(end, -1, "Could not find end of run_insta_auto_pipeline")
+        return source[start:end]
+
+    def test_three_experimental_style_buttons_removed_from_insta_auto(self):
+        # Track 3 removed the three style buttons from run_insta_auto_pipeline
+        # so the test-render entry point in the main menu is the single,
+        # non-duplicated path to the experimental renderer.
+        block = self._insta_auto_block()
+        for label in ("Dark+Teal", "Paper+Orange", "White+Coral"):
+            self.assertNotIn(label, block)
+        for callback in (
+            "carousel_exp_render:{export_id}:dark_teal",
+            "carousel_exp_render:{export_id}:paper_orange",
+            "carousel_exp_render:{export_id}:white_coral",
+        ):
+            self.assertNotIn(callback, block)
+
+    def test_three_experimental_style_buttons_exist_in_test_render_section(self):
+        # The three style buttons are now defined as a module-level
+        # _TEST_RENDER_BUTTON_ROW, used by the test-render FSM.
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        self.assertIn("_TEST_RENDER_BUTTON_ROW", source)
         self.assertIn('"🧪 Dark+Teal"', source)
         self.assertIn('"🧪 Paper+Orange"', source)
         self.assertIn('"🧪 White+Coral"', source)
-
-        # All three buttons must live inside the admin gate.
-        admin_gate_marker = "if message.from_user and message.from_user.id == ADMIN_ID:"
-        admin_start = source.find(admin_gate_marker)
-        self.assertNotEqual(admin_start, -1)
-        actions_pos = source.find(
-            "actions = InlineKeyboardMarkup(inline_keyboard=action_rows)", admin_start
-        )
-        self.assertNotEqual(actions_pos, -1)
-        block = source[admin_start:actions_pos]
-        for label in ("Dark+Teal", "Paper+Orange", "White+Coral"):
-            self.assertIn(label, block)
-
-    def test_experimental_callback_supports_three_segments(self):
-        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
-        self.assertIn("carousel_exp_render:{export_id}:dark_teal", source)
-        self.assertIn("carousel_exp_render:{export_id}:paper_orange", source)
-        self.assertIn("carousel_exp_render:{export_id}:white_coral", source)
+        # The callback prefix is test_render_style:<id>, not carousel_exp_render:.
+        for style_id in ("dark_teal", "paper_orange", "white_coral"):
+            self.assertIn(f"test_render_style:{style_id}", source)
 
     def test_experimental_renderer_exports_style_presets_dict(self):
         from services.experimental_carousel_renderer import STYLE_PRESETS
 
         self.assertEqual(set(STYLE_PRESETS.keys()), {"dark_teal", "paper_orange", "white_coral"})
+
+    # ------------------------------------------------------------------
+    # Test-render entry point track (test-render-entry-point)
+    # ------------------------------------------------------------------
+
+    def test_test_render_state_exists(self):
+        from utils.states import TestRenderFlow
+
+        self.assertEqual(
+            TestRenderFlow.waiting_for_text.state,
+            "TestRenderFlow:waiting_for_text",
+        )
+
+    def test_test_render_menu_button_is_admin_only(self):
+        source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
+        self.assertIn('"🧪 Тестовый рендер"', source)
+        # The button must be added inside the cmd_start admin gate.
+        admin_start = source.find("if message.from_user.id == ADMIN_ID:")
+        self.assertNotEqual(admin_start, -1, "Admin gate not found in cmd_start")
+        # Find the closing of this block: kb.append for /admin, then ].
+        block = source[admin_start:admin_start + 600]
+        self.assertIn("🧪 Тестовый рендер", block)
+
+    def test_test_render_command_and_handlers_exist(self):
+        source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
+        self.assertIn('Command("test_render")', source)
+        self.assertIn("F.text == \"🧪 Тестовый рендер\"", source)
+
+    def test_test_render_callback_handler_uses_fsm_state(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        # The style callback is gated by TestRenderFlow.waiting_for_style.
+        self.assertIn("TestRenderFlow.waiting_for_style", source)
+        self.assertIn('F.data.startswith("test_render_style:")', source)
 
 
 if __name__ == "__main__":

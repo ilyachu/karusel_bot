@@ -6,7 +6,7 @@ from aiogram.filters import StateFilter
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, BufferedInputFile
 from aiogram.enums import ChatAction
 
-from utils.states import CarouselFlow
+from utils.states import CarouselFlow, TestRenderFlow
 
 from utils.validation import validate_text_length, validate_file_size
 import logging
@@ -67,7 +67,10 @@ from services.background_registry import (
 )
 from services.html_renderer import render_layout_spec_html
 from services.cover_renderer import image_bytes_to_data_url
-from services.experimental_carousel_renderer import render_experimental_carousel
+from services.experimental_carousel_renderer import (
+    STYLE_PRESETS,
+    render_experimental_carousel,
+)
 from services.instagram_publisher import InstagramPublisher
 from services.meta_publish import MetaCredentials, build_carousel_publish_plan, load_export_package
 from services.threads_publish import build_threads_publish_plan, serialize_threads_publish_plan
@@ -517,15 +520,6 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         action_rows.append(
             [InlineKeyboardButton(text="🛰 Advanced Meta plan", callback_data=f"meta_prepare:{export_id}")]
         )
-        action_rows.append(
-            [
-                InlineKeyboardButton(text="🧪 Dark+Teal", callback_data=f"carousel_exp_render:{export_id}:dark_teal"),
-                InlineKeyboardButton(text="🧪 Paper+Orange", callback_data=f"carousel_exp_render:{export_id}:paper_orange"),
-            ]
-        )
-        action_rows.append(
-            [InlineKeyboardButton(text="🧪 White+Coral", callback_data=f"carousel_exp_render:{export_id}:white_coral")]
-        )
     actions = InlineKeyboardMarkup(inline_keyboard=action_rows) if action_rows else None
     unique_presets = list(dict.fromkeys(preset_background_ids))
     if custom_bg_bytes:
@@ -909,3 +903,225 @@ async def carousel_experimental_render(callback: types.CallbackQuery):
         f"Export: {package.export_id}"
     )
     await status.edit_text(f"✅ {style.label} готов.")
+
+
+# ---------------------------------------------------------------------------
+# Test-render entry point (admin-only mini-FSM)
+# ---------------------------------------------------------------------------
+
+
+_TEST_RENDER_BUTTON_ROW = [
+    [
+        InlineKeyboardButton(text="🧪 Dark+Teal", callback_data="test_render_style:dark_teal"),
+        InlineKeyboardButton(text="🧪 Paper+Orange", callback_data="test_render_style:paper_orange"),
+    ],
+    [
+        InlineKeyboardButton(text="🧪 White+Coral", callback_data="test_render_style:white_coral")
+    ],
+]
+
+
+async def _generate_test_render_plan(text: str) -> tuple[list, "CarouselPlan"]:
+    """Run the LLM plan pipeline without rendering.
+
+    Returns a tuple of ``(layout_specs, carousel_plan)``. Raises on
+    unrecoverable plan failure.
+    """
+
+    target_slides = resolve_target_slide_count(text, "auto")
+    rewrite_style = "concise"
+    raw_plan = await generate_instagram_carousel_plan(
+        text,
+        target_slides,
+        rewrite_style,
+        layout_style_override="auto",
+        theme_hint_override="auto",
+        color_palette="auto",
+        visual_mode="auto",
+    )
+    if raw_plan:
+        carousel_plan = parse_carousel_plan(raw_plan)
+    else:
+        slides_content = await generate_final_slides(text, target_slides, rewrite_style)
+        if not slides_content:
+            raise RuntimeError("LLM вернул пустой план и fallback тоже не сработал.")
+        carousel_plan = build_fallback_instagram_plan(slides_content)
+
+    carousel_plan = enforce_default_cta_slide(carousel_plan, visual_mode="auto")
+    carousel_plan, _ = apply_theme_selection_policy(carousel_plan, text)
+
+    layout_specs = build_instagram_layout_specs(
+        carousel_plan,
+        visual_mode=carousel_plan.theme_hint,
+        layout_style=carousel_plan.layout_style,
+    )
+    return layout_specs, carousel_plan
+
+
+async def cmd_test_render(message: types.Message, state: FSMContext):
+    """Entry point for the test-render mini-FSM.
+
+    Triggered by the '🧪 Тестовый рендер' main-menu button or the
+    /test_render command. Restricted to ``ADMIN_ID`` by the caller.
+    """
+
+    if not (message.from_user and message.from_user.id == ADMIN_ID):
+        await message.answer("⚠️ Тестовый рендер доступен только админу.")
+        return
+
+    await state.clear()
+    await state.set_state(TestRenderFlow.waiting_for_text)
+    await message.answer(
+        "🧪 Тестовый рендер. Пришли текст для карусели (или голосовое сообщение).\n"
+        "Я сгенерирую план и покажу превью 3 стилей.\n\n"
+        "Чтобы выйти, нажми /start."
+    )
+
+
+@router.message(TestRenderFlow.waiting_for_text, F.text)
+async def test_render_text(message: types.Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("🧪 Пришли непустой текст.")
+        return
+    if text.startswith("/"):
+        # Allow the user to escape the FSM with /start.
+        if text == "/start":
+            await state.clear()
+        return
+
+    is_valid, error_msg = validate_text_length(text)
+    if not is_valid:
+        await message.answer(error_msg)
+        return
+
+    status = await message.answer("🧪 Готовлю план…")
+    try:
+        layout_specs, carousel_plan = await _generate_test_render_plan(text)
+    except Exception as exc:
+        logging.exception("Test render plan generation failed")
+        await status.edit_text(f"⚠️ Не удалось сгенерировать план: {exc}")
+        return
+
+    if not layout_specs:
+        await status.edit_text("⚠️ Пустой план — попробуй другой текст.")
+        return
+
+    await state.update_data(
+        test_render_text=text,
+        layout_specs=[spec.to_dict() for spec in layout_specs],
+        carousel_plan=asdict(carousel_plan),
+    )
+    await state.set_state(TestRenderFlow.waiting_for_style)
+    await status.edit_text(
+        f"🧪 План готов ({len(layout_specs)} слайдов). Выбери стиль:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=_TEST_RENDER_BUTTON_ROW),
+    )
+
+
+@router.message(TestRenderFlow.waiting_for_text, F.voice)
+async def test_render_voice(message: types.Message, state: FSMContext, bot):
+    status = await message.answer("🧪 Расшифровываю голос…")
+    try:
+        text = await transcribe_voice(bot, message)
+    except Exception as exc:
+        logging.exception("Voice transcription failed for test render")
+        await status.edit_text(f"⚠️ Не удалось распознать голос: {exc}")
+        return
+    if not text:
+        await status.edit_text("⚠️ Пустая расшифровка. Пришли текст.")
+        return
+
+    is_valid, error_msg = validate_text_length(text)
+    if not is_valid:
+        await status.edit_text(error_msg)
+        return
+
+    try:
+        layout_specs, carousel_plan = await _generate_test_render_plan(text)
+    except Exception as exc:
+        logging.exception("Test render plan generation failed after voice")
+        await status.edit_text(f"⚠️ Не удалось сгенерировать план: {exc}")
+        return
+
+    if not layout_specs:
+        await status.edit_text("⚠️ Пустой план — попробуй другой текст.")
+        return
+
+    await state.update_data(
+        test_render_text=text,
+        layout_specs=[spec.to_dict() for spec in layout_specs],
+        carousel_plan=asdict(carousel_plan),
+    )
+    await state.set_state(TestRenderFlow.waiting_for_style)
+    await status.edit_text(
+        f"🧪 План готов ({len(layout_specs)} слайдов, из голоса). Выбери стиль:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=_TEST_RENDER_BUTTON_ROW),
+    )
+
+
+@router.callback_query(TestRenderFlow.waiting_for_style, F.data.startswith("test_render_style:"))
+async def test_render_style_callback(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    style_id = callback.data.split(":", 1)[1]
+    style = STYLE_PRESETS.get(style_id)
+    if not style:
+        await callback.message.answer(f"⚠️ Неизвестный стиль: {style_id}.")
+        return
+
+    data = await state.get_data()
+    layout_specs_dicts = data.get("layout_specs") or []
+    if not layout_specs_dicts:
+        await callback.message.answer("🧪 Сначала пришли текст.")
+        await state.set_state(TestRenderFlow.waiting_for_text)
+        return
+
+    # Reconstruct LayoutSpec objects.
+    layout_specs = []
+    for spec_dict in layout_specs_dicts:
+        try:
+            layout_specs.append(LayoutSpec(**spec_dict))
+        except Exception as exc:
+            logging.exception("Failed to reconstruct LayoutSpec")
+            await callback.message.answer(f"⚠️ Ошибка состояния: {exc}. Пришли текст заново.")
+            await state.set_state(TestRenderFlow.waiting_for_text)
+            return
+
+    status = await callback.message.answer(f"🧪 {style.label} — рендерю…")
+    try:
+        pngs = await asyncio.to_thread(
+            render_experimental_carousel,
+            layout_specs,
+            "chu ai",
+            "",
+            "",
+            style,
+        )
+    except Exception as exc:
+        logging.exception("Test render failed for style %s", style_id)
+        await status.edit_text(f"⚠️ {style.label} не удался: {exc}")
+        return
+
+    if not pngs:
+        await status.edit_text("⚠️ Нечего рендерить.")
+        return
+
+    media_group = [
+        InputMediaPhoto(
+            media=BufferedInputFile(
+                png,
+                filename=f"test_slide_{index+1:02d}.png",
+            )
+        )
+        for index, png in enumerate(pngs)
+    ]
+    await callback.message.answer_media_group(media_group)
+    await callback.message.answer(
+        f"🧪 {style.label}. Тестовый рендер. Прогоняй тот же текст через другие стили.",
+    )
+    # Re-show the style picker so the admin can keep iterating.
+    await status.edit_text(
+        f"✅ {style.label} готов. Выбери другой стиль или пришли новый текст.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=_TEST_RENDER_BUTTON_ROW),
+    )
+
