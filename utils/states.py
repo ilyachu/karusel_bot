@@ -23,4 +23,5 @@ class TestRenderFlow(StatesGroup):
     """
 
     waiting_for_text = State()
+    waiting_for_rewrite = State()
     waiting_for_style = State()

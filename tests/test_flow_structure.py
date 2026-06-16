@@ -426,6 +426,79 @@ class FlowStructureTests(unittest.TestCase):
         # the FSM data (regression guard: was a NameError on prod).
         self.assertIn("LayoutSpec,", source)
 
+    # ------------------------------------------------------------------
+    # Test-render style-options track (test-render-style-options)
+    # ------------------------------------------------------------------
+
+    def test_test_render_state_machine_has_three_states(self):
+        from utils.states import TestRenderFlow
+
+        self.assertEqual(
+            TestRenderFlow.waiting_for_text.state,
+            "TestRenderFlow:waiting_for_text",
+        )
+        self.assertEqual(
+            TestRenderFlow.waiting_for_rewrite.state,
+            "TestRenderFlow:waiting_for_rewrite",
+        )
+        self.assertEqual(
+            TestRenderFlow.waiting_for_style.state,
+            "TestRenderFlow:waiting_for_style",
+        )
+
+    def test_test_render_rewrite_keyboard_has_four_options(self):
+        """The 4 rewrite-style buttons must come from INSTA_REWRITE_LABELS."""
+
+        from handlers.carousel_flow import _build_test_render_rewrite_row
+
+        rows = _build_test_render_rewrite_row()
+        # 2 rows of 2 buttons = 4 options total.
+        all_buttons = [btn for row in rows for btn in row]
+        self.assertEqual(len(all_buttons), 4)
+
+        from handlers.common import INSTA_REWRITE_LABELS
+
+        for key, label in INSTA_REWRITE_LABELS.items():
+            # Each key is referenced as a callback_data on some button.
+            self.assertTrue(
+                any(btn.callback_data == f"insta_copy:{key}" for btn in all_buttons),
+                f"Missing insta_copy:{key} button",
+            )
+            # Each label is shown on some button.
+            self.assertTrue(
+                any(btn.text == label for btn in all_buttons),
+                f"Missing label {label!r}",
+            )
+
+    def test_test_render_rewrite_callback_handler_exists(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        self.assertIn("async def test_render_rewrite_callback", source)
+        # It must be gated by the new waiting_for_rewrite state.
+        self.assertIn(
+            'TestRenderFlow.waiting_for_rewrite, F.data.startswith("insta_copy:")',
+            source,
+        )
+
+    def test_test_render_text_transitions_to_rewrite_state(self):
+        """After validating text, both text and voice handlers must
+        transition to waiting_for_rewrite, not straight to waiting_for_style.
+        """
+
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+
+        # Find the test_render_text function body and confirm it sets
+        # the rewrite state.
+        text_start = source.find("async def test_render_text")
+        text_end = source.find("async def ", text_start + 1)
+        text_block = source[text_start:text_end]
+        self.assertIn("TestRenderFlow.waiting_for_rewrite", text_block)
+
+        # Same for test_render_voice.
+        voice_start = source.find("async def test_render_voice")
+        voice_end = source.find("async def ", voice_start + 1)
+        voice_block = source[voice_start:voice_end]
+        self.assertIn("TestRenderFlow.waiting_for_rewrite", voice_block)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -922,7 +922,35 @@ _TEST_RENDER_BUTTON_ROW = [
 ]
 
 
-async def _generate_test_render_plan(text: str) -> tuple[list, "CarouselPlan"]:
+def _build_test_render_rewrite_row() -> list[list[InlineKeyboardButton]]:
+    """Build the 4-button rewrite-style row for the test-render FSM.
+
+    Re-uses the production ``insta_copy:<id>`` callback prefix. The FSM
+    state decides which handler runs (production ``insta_copy_selected``
+    or test-render ``test_render_rewrite_callback``); the two handlers
+    are mutually exclusive because their StateFilter guards differ.
+    """
+
+    # Render the 4 options in 2 rows of 2.
+    items = list(INSTA_REWRITE_LABELS.items())
+    rows: list[list[InlineKeyboardButton]] = []
+    for index in range(0, len(items), 2):
+        row: list[InlineKeyboardButton] = []
+        for key, label in items[index:index + 2]:
+            row.append(
+                InlineKeyboardButton(
+                    text=label,
+                    callback_data=f"insta_copy:{key}",
+                )
+            )
+        rows.append(row)
+    return rows
+
+
+async def _generate_test_render_plan(
+    text: str,
+    rewrite_style: str = "concise",
+) -> tuple[list, "CarouselPlan"]:
     """Run the LLM plan pipeline without rendering.
 
     Returns a tuple of ``(layout_specs, carousel_plan)``. Raises on
@@ -930,7 +958,6 @@ async def _generate_test_render_plan(text: str) -> tuple[list, "CarouselPlan"]:
     """
 
     target_slides = resolve_target_slide_count(text, "auto")
-    rewrite_style = "concise"
     raw_plan = await generate_instagram_carousel_plan(
         text,
         target_slides,
@@ -974,8 +1001,7 @@ async def cmd_test_render(message: types.Message, state: FSMContext):
     await state.set_state(TestRenderFlow.waiting_for_text)
     await message.answer(
         "🧪 Тестовый рендер. Пришли текст для карусели (или голосовое сообщение).\n"
-        "Я сгенерирую план и покажу превью 3 стилей.\n\n"
-        "Чтобы выйти, нажми /start."
+        "Я покажу превью 3 стилей. Чтобы выйти, нажми /start."
     )
 
 
@@ -996,27 +1022,11 @@ async def test_render_text(message: types.Message, state: FSMContext):
         await message.answer(error_msg)
         return
 
-    status = await message.answer("🧪 Готовлю план…")
-    try:
-        layout_specs, carousel_plan = await _generate_test_render_plan(text)
-    except Exception as exc:
-        logging.exception("Test render plan generation failed")
-        await status.edit_text(f"⚠️ Не удалось сгенерировать план: {exc}")
-        return
-
-    if not layout_specs:
-        await status.edit_text("⚠️ Пустой план — попробуй другой текст.")
-        return
-
-    await state.update_data(
-        test_render_text=text,
-        layout_specs=[spec.to_dict() for spec in layout_specs],
-        carousel_plan=asdict(carousel_plan),
-    )
-    await state.set_state(TestRenderFlow.waiting_for_style)
-    await status.edit_text(
-        f"🧪 План готов ({len(layout_specs)} слайдов). Выбери стиль:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=_TEST_RENDER_BUTTON_ROW),
+    await state.update_data(test_render_text=text)
+    await state.set_state(TestRenderFlow.waiting_for_rewrite)
+    await message.answer(
+        "🧪 Выбери, как обработать текст:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=_build_test_render_rewrite_row()),
     )
 
 
@@ -1038,25 +1048,51 @@ async def test_render_voice(message: types.Message, state: FSMContext, bot):
         await status.edit_text(error_msg)
         return
 
+    await state.update_data(test_render_text=text)
+    await state.set_state(TestRenderFlow.waiting_for_rewrite)
+    await status.edit_text(
+        "🧪 Выбери, как обработать текст:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=_build_test_render_rewrite_row()),
+    )
+
+
+@router.callback_query(TestRenderFlow.waiting_for_rewrite, F.data.startswith("insta_copy:"))
+async def test_render_rewrite_callback(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    rewrite_style = callback.data.split(":", 1)[1]
+    if rewrite_style not in INSTA_REWRITE_LABELS:
+        await callback.message.answer(f"⚠️ Неизвестный режим текста: {rewrite_style}.")
+        return
+
+    data = await state.get_data()
+    text = (data.get("test_render_text") or "").strip()
+    if not text:
+        await callback.message.answer("🧪 Сначала пришли текст.")
+        await state.set_state(TestRenderFlow.waiting_for_text)
+        return
+
+    label = INSTA_REWRITE_LABELS[rewrite_style]
+    status = await callback.message.answer(f"🧪 Готовлю план в режиме «{label}»…")
     try:
-        layout_specs, carousel_plan = await _generate_test_render_plan(text)
+        layout_specs, carousel_plan = await _generate_test_render_plan(text, rewrite_style)
     except Exception as exc:
-        logging.exception("Test render plan generation failed after voice")
+        logging.exception("Test render plan generation failed")
         await status.edit_text(f"⚠️ Не удалось сгенерировать план: {exc}")
+        # Stay in waiting_for_rewrite so the admin can try a different style.
         return
 
     if not layout_specs:
-        await status.edit_text("⚠️ Пустой план — попробуй другой текст.")
+        await status.edit_text("⚠️ Пустой план — попробуй другой текст или режим.")
         return
 
     await state.update_data(
-        test_render_text=text,
+        test_render_rewrite_style=rewrite_style,
         layout_specs=[spec.to_dict() for spec in layout_specs],
         carousel_plan=asdict(carousel_plan),
     )
     await state.set_state(TestRenderFlow.waiting_for_style)
     await status.edit_text(
-        f"🧪 План готов ({len(layout_specs)} слайдов, из голоса). Выбери стиль:",
+        f"🧪 План готов ({len(layout_specs)} слайдов, «{label}»). Выбери стиль:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=_TEST_RENDER_BUTTON_ROW),
     )
 
@@ -1117,12 +1153,18 @@ async def test_render_style_callback(callback: types.CallbackQuery, state: FSMCo
         for index, png in enumerate(pngs)
     ]
     await callback.message.answer_media_group(media_group)
+    rewrite_label = INSTA_REWRITE_LABELS.get(
+        data.get("test_render_rewrite_style") or "concise",
+        "Короче",
+    )
     await callback.message.answer(
-        f"🧪 {style.label}. Тестовый рендер. Прогоняй тот же текст через другие стили.",
+        f"🧪 {style.label}. Тестовый рендер. "
+        f"Текст: «{rewrite_label}». Прогоняй тот же текст через другие стили.",
     )
     # Re-show the style picker so the admin can keep iterating.
     await status.edit_text(
         f"✅ {style.label} готов. Выбери другой стиль или пришли новый текст.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=_TEST_RENDER_BUTTON_ROW),
     )
+
 

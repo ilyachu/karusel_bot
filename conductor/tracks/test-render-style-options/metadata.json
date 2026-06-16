@@ -1,0 +1,33 @@
+{
+  "track_id": "test-render-style-options",
+  "title": "Add rewrite_style picker to the test-render mini-FSM",
+  "status": "approved",
+  "approved_at": "2026-06-16",
+  "updated_at": "2026-06-16",
+  "owner": "conductor",
+  "depends_on": "test-render-entry-point (must be deployed as baseline)",
+  "decisions": {
+    "new_state": "TestRenderFlow.waiting_for_rewrite (between text and plan generation)",
+    "options_count": 4 (exact, concise, educational, marketing) — same as INSTA_REWRITE_LABELS",
+    "callback_prefix": "insta_copy:<id> (re-used from production; FSM state decides which handler runs)",
+    "handler_isolation": "test_render_rewrite_callback (gated by TestRenderFlow.waiting_for_rewrite) does NOT call show_insta_auto_setup; production insta_copy_selected stays unchanged",
+    "production_intact": "insta_auto flow and insta_copy_selected callback untouched"
+  },
+  "files_to_modify": [
+    "utils/states.py",
+    "handlers/carousel_flow.py",
+    "tests/test_flow_structure.py"
+  ],
+  "files_preserved_uncommitted": [
+    "services/html_renderer.py",
+    "tests/test_html_renderer.py"
+  ],
+  "out_of_scope": [
+    "production deploy (only after explicit 'go')",
+    "color/visual_mode picker (3 visual style presets are enough for v1)",
+    "persistence of rewrite choice",
+    "insta_auto changes",
+    "removing readability fix"
+  ],
+  "next_step": "running conductor_implement (tasks 1..7) then deploy"
+}

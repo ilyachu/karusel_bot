@@ -4,7 +4,8 @@
 |----|-------|--------|---------|--------|
 | [experimental-carousel-pipeline](./tracks/experimental-carousel-pipeline/) | Experimental deterministic carousel renderer behind a separate test button | Approved (awaiting `Approve + go` and deploy) | 2026-06-16 | A/B visual stability |
 | [exp-renderer-style-system](./tracks/exp-renderer-style-system/) | 4-axis style system + 3-style inline preview (Dark+Teal / Paper+Orange / White+Coral) for the experimental renderer | Approved (awaiting `Approve + go` and deploy) | 2026-06-16 | Real design variation to A/B against production |
-| [test-render-entry-point](./tracks/test-render-entry-point/) | Separate 🧪 Тестовый рендер entry point in main menu with its own mini-FSM | Draft → awaiting approval | 2026-06-16 | Fast text-style iteration loop, no production render needed |
+| [test-render-entry-point](./tracks/test-render-entry-point/) | Separate 🧪 Тестовый рендер entry point in main menu with its own mini-FSM | Approved (awaiting `Approve + go` and deploy) | 2026-06-16 | Fast text-style iteration loop, no production render needed |
+| [test-render-style-options](./tracks/test-render-style-options/) | Add rewrite_style picker (Как есть / Короче / Подробнее / Ярче) to the test-render mini-FSM | Draft → awaiting approval | 2026-06-16 | Half-control: vary textual content, not only visual style |
 
 ## Conventions
 
