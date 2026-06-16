@@ -40,3 +40,6 @@ build/
 *.log
 *.db
 *.db-journal
+
+# OMX / agent artifacts
+.omx/
