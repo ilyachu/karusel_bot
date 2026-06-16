@@ -1,85 +1,59 @@
 # Karusel Bot
 
-Telegram-бот для генерации каруселей из текста, голосовых сообщений и пересланных постов.
-
-Идея проекта: отправить мысль в бот и получить готовую карусель для Telegram / Instagram:
+Telegram-бот, который превращает текст в готовые карусели для Instagram, Threads и Telegram.
 
 ```text
-текст -> план слайдов -> тема -> HTML-рендер -> PNG -> caption -> export package
+текст → план слайдов → выбор стиля → PNG-слайды → export-пакет → публикация
 ```
-
-Проект сейчас больше похож на рабочий прототип / личный контент-конвейер, чем на законченный SaaS.  
-Он уже умеет генерировать карусели, выбирать визуальную тему, рендерить карточки через Playwright и готовить export-пакет под будущую публикацию в Instagram.
 
 ## Возможности
 
-- Генерация карусели из обычного текста.
-- Генерация карусели из голосового сообщения через OpenAI Whisper.
-- Обработка пересланных Telegram-постов.
-- Режим `Insta Auto` для быстрого создания Instagram-ready карусели.
-- Автовыбор визуальной темы через локальную policy-логику.
-- Ручная фиксация темы перед генерацией.
-- HTML/CSS-рендер карточек через Playwright.
-- Экспорт PNG-слайдов, caption и metadata.
-- Подготовка Meta publishing plan без реальной публикации.
-- Публикация готовой карусели в Threads через официальный API.
-- Админский список разрешённых пользователей.
+- **🚀 Insta Auto** — быстрая генерация карусели с AI-планированием, выбором темы и HTML-рендером.
+- **🆕 Карусель NEW** — экспериментальный детерминированный рендер с 3 визуальными стилями (Dark+Teal, Paper+Orange, White+Coral) и выбором подачи текста (Как есть / Короче / Подробнее / Ярче).
+- **🖼 Обложка** — генерация обложки для карусели.
+- **Голосовые сообщения** — распознавание через OpenAI Whisper.
+- **Пересланные посты** — обработка forwarded сообщений.
+- **Публикация в Threads** — через официальный API.
+- **Подготовка Meta publish plan** — без реальной публикации.
+- **Экспорт** — PNG-слайды, caption, metadata в `data/exports/`.
 
 ## Как это работает
 
-В обычном сценарии:
+### Insta Auto (production)
 
 1. Пользователь отправляет текст, голосовое или пересланный пост.
-2. Бот анализирует текст через OpenRouter.
-3. Бот собирает план карусели.
-4. Локальный layout engine выбирает тему и структуру слайдов.
-5. HTML renderer рендерит слайды в PNG.
-6. Бот отправляет слайды в Telegram.
-7. Бот сохраняет export package в `EXPORTS_DIR`.
+2. Бот анализирует текст через OpenRouter / OpenAI.
+3. Бот собирает план карусели (роли слайдов, заголовки, body).
+4. Layout engine выбирает тему и структуру слайдов.
+5. HTML renderer рендерит слайды в PNG через Playwright Chromium.
+6. Бот отправляет слайды в Telegram и сохраняет export-пакет.
 
-В `Insta Auto`:
+### 🆕 Карусель NEW (экспериментальный)
 
-1. Нажмите `🚀 Insta Auto`.
-2. Оставьте тему в `Auto` или зафиксируйте вручную.
-3. Отправьте текст.
-4. Получите карусель, caption и export package.
+1. Нажмите «🆕 Карусель NEW» в главном меню.
+2. Пришлите текст (или голосовое).
+3. Выберите подачу текста: **Как есть / Короче / Подробнее / Ярче**.
+4. Выберите визуальный стиль: **Dark+Teal / Paper+Orange / White+Coral**.
+5. Получите PNG-слайды. Можно переключать стили без повторной генерации текста.
 
-## Визуальные темы
+Экспериментальный рендер **не использует AI-сгенерированный HTML** — все слайды строятся по жёстким шаблонам. Это позволяет A/B-тестировать, насколько детерминированный рендер стабильнее AI-рендера.
 
-Сейчас в проекте есть несколько тем:
+## Визуальные стили (Карусель NEW)
 
-- `memory_archive` — светлая редакционная тема для памяти, заметок, knowledge posts.
-- `research_mono` — светлая аналитическая тема для research/tool/framework posts.
-- `founder_brief` — спокойная светлая тема для founder/product/strategy posts.
-- `growth_black` — тёмная контрастная тема для growth/marketing/performance posts.
+| Стиль | Фон | Шрифт | Акцент | Декорация |
+|-------|-----|-------|--------|-----------|
+| **Dark+Teal** | `#0a0a0a` | Inter | teal `#2dd4bf` | radial glow |
+| **Paper+Orange** | `#f4ede0` (cream) | Playfair Display | orange `#fb923c` | ruled lines |
+| **White+Coral** | `#ffffff` | Unbounded | coral `#fb7185` | dot grid |
 
-Важно: `creator_bold` не используется в Auto-режиме, потому что для новостных и инструментальных постов он часто выглядел слишком шумно. Его можно вернуть только как явный ручной режим, если понадобится.
+## Визуальные темы (Insta Auto)
 
-## Что нужно для работы
+- `memory_archive` — светлая редакционная тема.
+- `research_mono` — светлая аналитическая тема.
+- `founder_brief` — спокойная светлая тема.
+- `growth_black` — тёмная контрастная тема.
 
-Минимально:
-
-- Python 3.12+
-- Telegram Bot Token
-- OpenRouter API key
-- OpenAI API key
-- Fal.ai key
-- Playwright Chromium
-
-OpenAI нужен для:
-
-- Whisper transcription
-- fallback текстовой генерации
-
-OpenRouter нужен для:
-
-- планирования карусели
-- генерации слайдов
-- генерации caption
-
-Fal.ai сейчас используется для AI-фонов в ручных режимах.
-
-## Установка локально
+## Быстрый старт
 
 ```bash
 git clone https://github.com/ilyachu/karusel_bot.git
@@ -91,304 +65,121 @@ python -m playwright install chromium
 cp .env.example .env
 ```
 
-Заполните `.env`.
+Заполните `.env` (см. ниже), затем:
 
 ```bash
 python main.py
 ```
 
-## Установка через Docker
+### Через Docker
 
 ```bash
-git clone https://github.com/ilyachu/karusel_bot.git
-cd karusel_bot
 cp .env.example .env
-```
-
-Заполните `.env`, затем:
-
-```bash
+# заполните .env
 docker compose up -d --build
-```
-
-Логи:
-
-```bash
 docker compose logs -f
-```
-
-Остановка:
-
-```bash
-docker compose down
 ```
 
 ## Переменные окружения
 
-Пример находится в `.env.example`.
+| Переменная | Обязательная | Описание |
+|------------|-------------|----------|
+| `TELEGRAM_BOT_TOKEN` | да | Токен бота из BotFather |
+| `ADMIN_ID` | да | Telegram ID администратора |
+| `OPENAI_API_KEY` | да | OpenAI API key (Whisper + fallback) |
+| `OPENROUTER_API_KEY` | да | OpenRouter API key (генерация текста) |
+| `FAL_KEY` | да | Fal.ai key (AI-фоны) |
+| `OPENROUTER_MODEL` | нет | Модель для текста (по умолчанию `google/gemini-3.1-flash-lite-preview`) |
+| `DATA_DIR` | нет | Папка для SQLite и логов (по умолчанию `data`) |
+| `EXPORTS_DIR` | нет | Папка для export-пакетов |
+| `EXPORT_PUBLIC_BASE_URL` | нет | Публичный URL для Meta publishing |
+| `INSTAGRAM_ACCESS_TOKEN` | нет | Instagram long-lived access token |
+| `INSTAGRAM_USER_ID` | нет | Instagram API user ID |
+| `THREADS_ACCESS_TOKEN` | нет | Threads access token |
+| `THREADS_USER_ID` | нет | Threads user ID |
 
-```env
-TELEGRAM_BOT_TOKEN=
-OPENAI_API_KEY=
-OPENROUTER_API_KEY=
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=google/gemini-3.1-flash-lite-preview
-FAL_KEY=
-ADMIN_ID=
-DATA_DIR=data
-EXPORTS_DIR=data/exports
-EXPORT_PUBLIC_BASE_URL=
-INSTAGRAM_ACCESS_TOKEN=
-INSTAGRAM_USER_ID=
-INSTAGRAM_API_BASE=https://graph.instagram.com/v22.0
-INSTAGRAM_MEDIA_PROXY_BASE_URL=https://meta.chuchuchu.online
-INSTAGRAM_MEDIA_PROXY_SECRET=
-INSTAGRAM_MEDIA_PROXY_TTL_SECONDS=300
-INSTAGRAM_MEDIA_PROXY_BOT_ALIAS=KARUSEL
-META_APP_ID=
-META_APP_SECRET=
-META_REDIRECT_URI=
-META_GRAPH_HOST=graph.instagram.com
-META_GRAPH_API_VERSION=v24.0
-META_WEBHOOK_CALLBACK_URL=
-META_WEBHOOK_VERIFY_TOKEN=
-META_DEAUTH_CALLBACK_URL=
-META_DATA_DELETION_REQUEST_URL=
-```
-
-### Основные переменные
-
-- `TELEGRAM_BOT_TOKEN` — токен бота из BotFather.
-- `ADMIN_ID` — Telegram ID администратора.
-- `OPENROUTER_API_KEY` — ключ OpenRouter.
-- `OPENROUTER_MODEL` — модель для текста.
-- `OPENAI_API_KEY` — ключ OpenAI для Whisper и fallback.
-- `FAL_KEY` — ключ Fal.ai для генерации фонов.
-- `DATA_DIR` — папка для SQLite и логов.
-- `EXPORTS_DIR` — папка для export-пакетов.
-- `EXPORT_PUBLIC_BASE_URL` — публичный URL, по которому будут доступны export-файлы для Meta.
-- `INSTAGRAM_ACCESS_TOKEN` — long-lived Instagram access token для аккаунта публикации.
-- `INSTAGRAM_USER_ID` — Instagram API user ID аккаунта публикации.
-- `INSTAGRAM_API_BASE` — версия Instagram Graph API.
-- `INSTAGRAM_MEDIA_PROXY_*` — публичная signed-ссылка на Telegram media proxy для передачи слайдов в Instagram API.
-
-### Meta-переменные
-
-Meta-переменные нужны для подготовки publish plan и app review. Реальная публикация каруселей выполняется через `INSTAGRAM_*` переменные.
-
-- `META_APP_ID`
-- `META_APP_SECRET`
-- `META_REDIRECT_URI`
-- `META_GRAPH_HOST`
-- `META_GRAPH_API_VERSION`
-- `META_WEBHOOK_CALLBACK_URL`
-- `META_WEBHOOK_VERIFY_TOKEN`
-- `META_DEAUTH_CALLBACK_URL`
-- `META_DATA_DELETION_REQUEST_URL`
-
-Подробнее: `docs/meta-publishing.md`.
+Полный список — в `.env.example`.
 
 ## Админ-доступ
 
-Бот закрыт через allowlist.
+Бот закрыт через allowlist. Администратор задаётся через `ADMIN_ID` в `.env`.
 
-Администратор задаётся через:
+Админ может добавлять/удалять пользователей через `/admin`.
 
-```env
-ADMIN_ID=123456789
-```
-
-Админ может добавлять пользователей через `/admin`.
-
-Если пользователь не в allowlist, бот ответит:
-
-```text
-У вас нет доступа к этому боту.
-```
-
-## Экспорт каруселей
-
-`Insta Auto` создаёт export package:
-
-```text
-data/exports/<timestamp>-<chat_id>-<slug>/
-  slide_01.png
-  slide_02.png
-  ...
-  caption.txt
-  metadata.json
-```
-
-`metadata.json` содержит:
-
-- `export_id`
-- `slides`
-- `carousel_plan`
-- `layout_specs`
-- `theme_decision`
-- `render_mode`
-
-Этот export package — граница между генерацией и будущей публикацией.
-
-Из того же export package можно сразу собрать `Threads`-ready export plan и отдать его в отдельный OAuth/publisher сервис.
-
-## Подготовка к Instagram / Meta publishing
-
-Meta требует публичные URL для картинок.
-
-Поэтому перед реальной публикацией нужно:
-
-1. Поднять public hosting для `EXPORTS_DIR`.
-2. Задать `EXPORT_PUBLIC_BASE_URL`.
-3. Подключить Instagram professional account через Meta.
-4. Получить `ig_user_id` и access token.
-5. Выполнить publish flow.
-
-Текущий код уже умеет готовить request plan:
-
-- child media containers
-- parent carousel container
-- media publish request
-- polling plan
-
-Файл: `services/meta_publish.py`.
+Если пользователь не в allowlist, бот отвечает: «⛔️ У вас нет доступа к этому боту.»
 
 ## Структура проекта
 
 ```text
-handlers/              Telegram flow
-services/              генерация, рендер, export, Meta scaffold
-utils/                 БД, состояния, сообщения, валидация
-assets/                пресеты и шрифты
-docs/                  заметки по архитектуре и деплою
-tests/                 тесты
-data/                  runtime-данные, не коммитится
+handlers/              Telegram-хендлеры (aiogram routers)
+  carousel_flow.py     Insta Auto + 🆕 Карусель NEW FSM
+  common.py            Главное меню, команды, настройки
+  cover_flow.py        Генерация обложек
+  admin.py             Админ-панель
+services/              Бизнес-логика
+  layout_engine.py     Планирование слайдов, темы, LayoutSpec
+  html_renderer.py     Production HTML-рендер (Playwright + Pillow)
+  experimental_carousel_renderer.py  Экспериментальный детерминированный рендер
+  gemini_client.py     LLM-клиент (OpenRouter / OpenAI)
+  instagram_package.py Экспорт PNG + caption + metadata
+  meta_publish.py      Meta publish plan scaffold
+  threads_publish.py   Threads publish plan
+  cover_renderer.py    Рендер обложек
+  background_registry.py  Пресеты фонов
+utils/                 Вспомогательные модули
+  database.py          SQLite (allowed_users, export_packages)
+  states.py            FSM-состояния (CarouselFlow, TestRenderFlow)
+  validation.py        Валидация текста
+tests/                 Тесты (unittest)
+  test_flow_structure.py  AST-тесты на структуру хендлеров
+  test_experimental_carousel_renderer.py  Тесты экспериментального рендера
+  test_html_renderer.py  Тесты production рендера
+  test_layout_engine.py  Тесты layout engine
+conductor/             Conductor-инфраструктура для AI-агентов
+  tracks.md            Реестр треков
+  tracks/              Треки (spec + plan + metadata)
+data/                  Runtime-данные (не коммитится)
 ```
 
-## Полезные команды
-
-Запуск тестов:
+## Тестирование
 
 ```bash
-PYTHONPATH=. python -m unittest \
-  tests.test_layout_engine \
-  tests.test_html_renderer \
-  tests.test_renderer \
-  tests.test_instagram_package \
-  tests.test_export_hosting \
-  tests.test_meta_publish \
-  test_admin_logic
+# Все тесты
+pytest tests/
+
+# Только экспериментальный рендер
+pytest tests/test_experimental_carousel_renderer.py -v
+
+# Только flow-structure
+pytest tests/test_flow_structure.py -v
 ```
 
-Проверка синтаксиса:
+## Инструкция для AI-агентов
 
-```bash
-python -m compileall main.py handlers services utils tests test_admin_logic.py
-```
+Проект использует **Conductor-методологию** (см. `conductor/`). Если вы AI-агент, читайте:
 
-Docker rebuild:
+1. `conductor/index.md` — оглавление.
+2. `conductor/product.md` — что и зачем.
+3. `conductor/tech-stack.md` — стек.
+4. `conductor/workflow.md` — как работать с проектом (включая deploy).
+5. `conductor/tracks.md` — какие треки есть и в каком статусе.
 
-```bash
-docker compose up -d --build
-```
+Ключевые правила:
 
-## Инструкция для Codex / Claude
-
-Если вы хотите попросить Codex или Claude настроить этот проект, можно дать такой промпт:
-
-```text
-Ты работаешь с репозиторием karusel_bot.
-
-Задача:
-1. Проверить README.md, .env.example, docker-compose.yml и Dockerfile.
-2. Создать .env на основе .env.example.
-3. Объяснить, какие ключи нужны и где их получить.
-4. Установить зависимости.
-5. Установить Playwright Chromium.
-6. Запустить тесты.
-7. Запустить бота локально или через Docker.
-8. Проверить, что data/ и .env не попадают в git.
-
-Ограничения:
-- не печатай реальные токены в ответах
-- не коммить .env
-- не трогай data/
-- не меняй архитектуру без необходимости
-```
-
-Если нужна настройка сервера:
-
-```text
-Настрой деплой karusel_bot на сервере.
-
-Требования:
-1. Код должен лежать в отдельной папке проекта.
-2. .env должен храниться только на сервере.
-3. data/ должен быть volume и не перетираться при обновлениях.
-4. Бот должен запускаться через docker compose.
-5. После деплоя проверь docker compose logs и статус контейнера.
-6. Не используй password-based GitHub Actions workflow в публичном репозитории.
-7. Если нужен автодеплой, предложи SSH-key based private CI workflow.
-```
-
-Если нужна доработка `Insta Auto`:
-
-```text
-Доработай режим Insta Auto.
-
-Контекст:
-- текстовая генерация идёт через OpenRouter
-- fallback через OpenAI
-- layout строится через services/layout_engine.py
-- HTML-рендер через services/html_renderer.py
-- export package создаётся через services/instagram_package.py
-
-Требования:
-1. Не добавляй технические подписи на слайды.
-2. Не добавляй fake UI-кнопки внутрь картинок.
-3. Последний слайд должен быть CTA.
-4. Русский исходный текст должен давать русские слайды.
-5. Сохраняй export package contract.
-6. Покрой изменения тестами.
-```
-
-## Текущий статус
-
-Работает:
-
-- генерация каруселей
-- `Insta Auto`
-- выбор темы
-- HTML rendering
-- export packages
-- Meta publish scaffold
-
-Не завершено:
-
-- реальный Instagram OAuth
-- реальный Meta publish execution
-- public hosting для export-файлов
-- полноценная визуальная QA разных тем
+- **Не коммить `.env`**, `data/`, `bot.log`, `bot_database.db`.
+- **Deploy требует `docker compose down bot && docker compose up -d --build`** — `restart` не подхватывает изменения кода (см. `conductor/workflow.md`).
+- **Не трогать `services/html_renderer.py` и `tests/test_html_renderer.py`** — там незакоммиченный readability-fix.
+- **Новые рендеры** — в `services/`, синхронные, обёрнутые в `asyncio.to_thread(...)`.
+- **Тесты** — `unittest`, AST-тесты в `test_flow_structure.py`.
 
 ## Безопасность
 
-Не коммитьте:
-
-- `.env`
-- токены
-- базы SQLite
-- логи
-- export output
-
-В `.gitignore` уже добавлены:
-
-- `.env`
-- `data/`
-- `output/`
-- `bot.log`
-- `bot_database.db`
-- `voice_*.ogg`
+- `.env` в `.gitignore` — токены не коммитятся.
+- `data/` в `.gitignore` — SQLite и export-пакеты не коммитятся.
+- `bot.log` в `.gitignore`.
+- Все секреты читаются из `os.getenv()` в `config.py`.
+- В коде нет хардкоженных токенов.
 
 ## Лицензия
 
-Пока лицензия явно не задана. Если планируется публичное использование, добавьте `LICENSE`.
+MIT. См. файл `LICENSE`.
