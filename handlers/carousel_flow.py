@@ -49,6 +49,7 @@ from services.export_hosting import build_public_export_info
 from services.instagram_package import build_instagram_export, update_export_metadata
 from services.layout_engine import (
     LAYOUT_STYLE_LABELS,
+    LayoutSpec,
     VISUAL_MODE_LABELS,
     apply_theme_selection_policy,
     apply_theme_override,

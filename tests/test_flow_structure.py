@@ -422,6 +422,9 @@ class FlowStructureTests(unittest.TestCase):
         # The style callback is gated by TestRenderFlow.waiting_for_style.
         self.assertIn("TestRenderFlow.waiting_for_style", source)
         self.assertIn('F.data.startswith("test_render_style:")', source)
+        # And it must import LayoutSpec to reconstruct spec objects from
+        # the FSM data (regression guard: was a NameError on prod).
+        self.assertIn("LayoutSpec,", source)
 
 
 if __name__ == "__main__":
