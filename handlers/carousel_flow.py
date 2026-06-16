@@ -991,12 +991,13 @@ async def cmd_test_render(message: types.Message, state: FSMContext):
 
     Triggered by the '🆕 Карусель NEW' main-menu button or the
     /test_render command. Available to any user in the allowed_users
-    list (admins are also in the list).
+    list AND to the admin.
     """
 
     from utils.database import is_user_allowed
+    from config import ADMIN_ID
 
-    if not (message.from_user and is_user_allowed(message.from_user.id)):
+    if not (message.from_user and (message.from_user.id == ADMIN_ID or is_user_allowed(message.from_user.id))):
         await message.answer("⛔️ У вас нет доступа к этому боту.")
         return
 

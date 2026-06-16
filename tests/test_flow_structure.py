@@ -403,23 +403,29 @@ class FlowStructureTests(unittest.TestCase):
         )
 
     def test_test_render_menu_button_uses_allowed_gate(self):
-        """The '🆕 Карусель NEW' button must be added inside the
-        ``is_user_allowed`` gate, not the ``ADMIN_ID`` gate.
+        """The '🆕 Карусель NEW' button must be added inside a gate
+        that passes for the admin OR for any user in the allowed list.
+        It must NOT be admin-only (the previous behaviour).
         """
 
         source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
-        self.assertIn('"🆕 Карусель NEW"', source)
-        # The button must live inside the is_user_allowed check, NOT the
-        # admin-only /admin check below.
-        allowed_marker = "if is_user_allowed(message.from_user.id):"
-        allowed_start = source.find(allowed_marker)
-        self.assertNotEqual(allowed_start, -1, "is_user_allowed gate not found in cmd_start")
-        # Look at the next ~600 chars (covers the kb.append line).
-        block = source[allowed_start:allowed_start + 600]
-        self.assertIn("🆕 Карусель NEW", block)
+        # The '🆕 Карусель NEW' string appears in a doc comment AND in
+        # the actual kb.append. We want to assert about the kb.append,
+        # which is the *second* occurrence.
+        first_idx = source.find("🆕 Карусель NEW")
+        self.assertNotEqual(first_idx, -1)
+        append_idx = source.find("🆕 Карусель NEW", first_idx + 1)
+        self.assertNotEqual(append_idx, -1)
+        # Look at the 1200 chars before the kb.append to find the gate.
+        prefix = source[max(0, append_idx - 1200):append_idx]
+        # The gate must be the *combined* admin-or-allowed check.
+        self.assertIn("ADMIN_ID", prefix)
+        self.assertIn("is_user_allowed", prefix)
         # And the button text must NOT be inside the admin gate.
         admin_start = source.find("if message.from_user.id == ADMIN_ID:")
         self.assertNotEqual(admin_start, -1)
+        # The admin gate is the one followed by '/admin' kb.append; the
+        # '🆕 Карусель NEW' button must NOT be in that block.
         admin_block = source[admin_start:admin_start + 600]
         self.assertNotIn("🆕 Карусель NEW", admin_block)
 

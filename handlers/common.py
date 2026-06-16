@@ -207,9 +207,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
         [KeyboardButton(text="🚀 Insta Auto")],
     ]
     # The "🆕 Карусель NEW" button is available to all allowed users
-    # (admins are also in the allowed list, so this is a superset of
-    # the previous admin-only gate).
-    if is_user_allowed(message.from_user.id):
+    # AND to the admin (admin is not in the allowed_users table by
+    # default — admin always passes the gate).
+    if message.from_user.id == ADMIN_ID or is_user_allowed(message.from_user.id):
         kb.append([KeyboardButton(text="🆕 Карусель NEW")])
     kb.extend(
         [
@@ -233,11 +233,11 @@ async def cmd_start(message: types.Message, state: FSMContext):
 async def cmd_test_render_command(message: types.Message, state: FSMContext):
     """Command shortcut for the experimental renderer.
 
-    Available to all allowed users (not just admins).
+    Available to all allowed users AND to the admin.
     """
     from handlers.carousel_flow import cmd_test_render
 
-    if not is_user_allowed(message.from_user.id):
+    if not (message.from_user.id == ADMIN_ID or is_user_allowed(message.from_user.id)):
         await message.answer("⛔️ У вас нет доступа к этому боту.")
         return
     await cmd_test_render(message, state)
@@ -247,11 +247,11 @@ async def cmd_test_render_command(message: types.Message, state: FSMContext):
 async def cmd_test_render_menu(message: types.Message, state: FSMContext):
     """Main-menu entry to the experimental renderer.
 
-    Available to all allowed users.
+    Available to all allowed users AND to the admin.
     """
     from handlers.carousel_flow import cmd_test_render
 
-    if not is_user_allowed(message.from_user.id):
+    if not (message.from_user.id == ADMIN_ID or is_user_allowed(message.from_user.id)):
         await message.answer("⛔️ У вас нет доступа к этому боту.")
         return
     await cmd_test_render(message, state)
