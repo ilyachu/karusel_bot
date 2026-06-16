@@ -218,7 +218,7 @@ action_rows.append(
 
 ## Out of Scope (explicit)
 
-- Deploying to `root@5.253.188.164` — only after explicit user "go ahead".
+- Deploying to `root@<SERVER_IP>` — only after explicit user "go ahead".
 - Exposing more than 3 style presets.
 - Adding new slide types (quote / number / stats / checklist).
 - Touching `services/cover_renderer.py` or `handlers/cover_flow.py`.

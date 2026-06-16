@@ -183,7 +183,7 @@ print(len(pngs), [len(p) for p in pngs])
 
 ## Out of Scope (explicit)
 
-- Deploying to `root@5.253.188.164` — only after explicit user "go ahead".
+- Deploying to `root@<SERVER_IP>` — only after explicit user "go ahead".
 - Persisting `preset_background_data_url` into metadata — left for v2. v1 passes `""` and the experimental preset branch renders the dark surface; the comparison is still informative.
 - Adding Jinja2 or any templating engine — first iteration is inline HTML strings.
 - Touching `services/cover_renderer.py` or `handlers/cover_flow.py`.

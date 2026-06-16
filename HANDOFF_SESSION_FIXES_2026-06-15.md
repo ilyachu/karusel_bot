@@ -1,8 +1,8 @@
 # HANDOFF — сессия фиксов кастомного фона и русского языка в обложке
 
 **Дата:** 2026-06-15
-**Бот:** `@karusel_new_bot` (id 8918241849), контейнер `karusel_bot_new` на `root@5.253.188.164`
-**Локальный репо:** `/Users/ilyachumachenkov/Documents/контент мопед/karusel_bot`
+**Бот:** `@karusel_new_bot` (id <REDACTED>), контейнер `karusel_bot_new` на `root@<REDACTED>`
+**Локальный репо:** `/Users/<REDACTED>/karusel_bot`
 **Ветка:** `main`, коммиты за сессию: `a2bc1b4` (фон), `fa95483` (русский язык)
 
 ---
@@ -13,7 +13,7 @@
 
 1. **Кастомный фон не показывался** в 4 стилях карусели (magazine / terminal / poster / carddeck) — починено в `services/html_renderer.py`.
 2. **Обложка генерировалась на английском**, игнорируя русский текст пользователя — починено в `services/gemini_client.py` (двойная защита: system prompt + retranslation fallback).
-3. **Кнопка «📬 Обратная связь»** (feature) — отправляет сообщение пользователя админу `ADMIN_ID=252202`. Реализована в `handlers/common.py` + bypass в `middlewares/access.py`.
+3. **Кнопка «📬 Обратная связь»** (feature) — отправляет сообщение пользователя админу `ADMIN_ID=<ADMIN_ID>`. Реализована в `handlers/common.py` + bypass в `middlewares/access.py`.
 4. **Pipeline-статусы карусели** стали детальными (5 шагов вместо 3 строк).
 5. **Деплой через `cat | ssh`** — без rsync (rsync нестабилен).
 
@@ -25,7 +25,7 @@
 
 ### Что было ДО этой сессии
 
-В чате с пользователем (id 252202) `@karusel_new_bot`:
+В чате с пользователем (id <ADMIN_ID>) `@karusel_new_bot`:
 
 - Бот работал, генерировал карусели, но **кастомный фон не показывался** — картинка либо была полностью перекрыта, либо не видна вообще.
 - В режиме "Обложка" (`🖼 Обложка`) текст генерировался **на английском**, даже когда пользователь писал по-русски.
@@ -98,7 +98,7 @@ System prompt у `_router_json_request` и `_openai_json_request` был:
   - Новый `StatesGroup Feedback(waiting_for_message)`.
   - Хендлер `cmd_feedback_start` — по кнопке «📬 Обратная связь» ставит FSM-состояние.
   - Хендлер `cmd_feedback_receive` — отправляет `bot.send_message(ADMIN_ID, admin_text)` админу и подтверждает пользователю.
-  - `ADMIN_ID` импортируется из `config.py` (= 252202).
+  - `ADMIN_ID` импортируется из `config.py` (= <ADMIN_ID>).
 - `middlewares/access.py`: bypass в AccessMiddleware — если `state == Feedback.waiting_for_message`, пропускает всех пользователей (не только whitelist / admin).
 - Главное меню в `handlers/common.py` (reply keyboard) уже имеет кнопку «📬 Обратная связь».
 
@@ -147,31 +147,31 @@ git commit -m "..."
 git push origin main
 
 # 3. Копирование файлов на сервер
-cat services/html_renderer.py | ssh root@5.253.188.164 'cat > /root/karusel_bot_v2/services/html_renderer.py'
-cat services/gemini_client.py | ssh root@5.253.188.164 'cat > /root/karusel_bot_v2/services/gemini_client.py'
+cat services/html_renderer.py | ssh root@<SERVER_IP> 'cat > /root/karusel_bot_v2/services/html_renderer.py'
+cat services/gemini_client.py | ssh root@<SERVER_IP> 'cat > /root/karusel_bot_v2/services/gemini_client.py'
 # (по аналогии для tests, handlers и т.д.)
 
 # 4. Пересборка и перезапуск контейнера
-ssh root@5.253.188.164 'cd /root/karusel_bot_v2 && docker compose down bot && docker compose up -d --build bot'
+ssh root@<SERVER_IP> 'cd /root/karusel_bot_v2 && docker compose down bot && docker compose up -d --build bot'
 ```
 
 **Проверка:**
 ```bash
-ssh root@5.253.188.164 'docker logs karusel_bot_new --tail 30'
+ssh root@<SERVER_IP> 'docker logs karusel_bot_new --tail 30'
 ```
 
 Ожидаемые строки:
 - `Database initialized successfully.`
 - `Bot started...`
 - `Start polling`
-- `Run polling for bot @karusel_new_bot id=8918241849 - 'karusel_new'`
+- `Run polling for bot @karusel_new_bot id=<BOT_ID> - 'karusel_new'`
 
 ---
 
 ## Структура репо (для контекста)
 
 ```
-/Users/ilyachumachenkov/Documents/контент мопед/karusel_bot/
+/Users/<REDACTED>/karusel_bot/
 ├── handlers/
 │   ├── common.py              # Кнопки меню, /start, /help, Feedback, Insta Auto setup
 │   ├── carousel_flow.py       # Pipeline карусели (5 шагов), Insta Auto
@@ -188,19 +188,19 @@ ssh root@5.253.188.164 'docker logs karusel_bot_new --tail 30'
 │   ├── image_renderer.py      # Pillow fallback рендер
 │   └── ... (gemini, openai, threads, etc.)
 ├── tests/                     # 90 тестов, 100% зелёных
-├── config.py                  # BOT_TOKEN, ADMIN_ID=252202, OpenRouter/OpenAI/NeuralDeep ключи
+├── config.py                  # BOT_TOKEN, ADMIN_ID=<ADMIN_ID>, OpenRouter/OpenAI/NeuralDeep ключи
 ├── .env                       # Реальные ключи (НЕ в git)
 ├── .env.example               # Шаблон (в git)
 └── .gitignore                 # Игнорирует .env, exports/, кэши
 ```
 
-**`config.py`** хранит `ADMIN_ID=252202` (user id владельца).
+**`config.py`** хранит `ADMIN_ID=<ADMIN_ID>` (user id владельца).
 
 ---
 
 ## Серверная инфраструктура
 
-- **Хост:** `root@5.253.188.164`
+- **Хост:** `root@<REDACTED>`
 - **Путь к проекту:** `/root/karusel_bot_v2/`
 - **Контейнер:** `karusel_bot_new` (Docker Compose)
 - **Docker Compose:** `karusel_bot_v2` сеть
@@ -217,7 +217,7 @@ ssh root@5.253.188.164 'docker logs karusel_bot_new --tail 30'
 
 1. **NeuralDeep иногда возвращает `Unterminated string starting at...`** — JSON парсинг падает. Видно в логах. Есть fallback на OpenAI, но не всегда спасает. **Не починено в этой сессии** — обойти это можно перезапросом.
 
-2. **Опция «🛰 Advanced Meta plan» и публикация в Instagram/Threads** — кнопка показывается только админу (id 252202). Реально ли работает — неизвестно (не тестировалось в этой сессии).
+2. **Опция «🛰 Advanced Meta plan» и публикация в Instagram/Threads** — кнопка показывается только админу (id <ADMIN_ID>). Реально ли работает — неизвестно (не тестировалось в этой сессии).
 
 3. **OpenAI fallback иногда возвращает 401 Unauthorized** (видно в логах). Если NeuralDeep упал И OpenAI упал — `html_body` пустой, и рендер уходит в Pillow fallback (для пресетов). Для custom_bg — `render_layout_spec` тоже fallback, и это может выглядеть не идеально. **Не починено.**
 
@@ -231,7 +231,7 @@ ssh root@5.253.188.164 'docker logs karusel_bot_new --tail 30'
 
 **Запуск:**
 ```bash
-cd /Users/ilyachumachenkov/Documents/контент\ мопед/karusel_bot
+cd /Users/<USER>/Documents/контент\ мопед/karusel_bot
 source .venv/bin/activate
 python3 -m pytest tests/ -x --tb=short
 ```
@@ -281,7 +281,7 @@ M  tests/test_flow_structure.py
 feat: feedback flow, 5-step pipeline status, slide count setting
 
 - Add Feedback FSM + button, with AccessMiddleware bypass so all users
-  can send feedback to ADMIN_ID=252202.
+  can send feedback to ADMIN_ID=<ADMIN_ID>.
 - Replace 3-line ad-hoc pipeline messages with 5-step status via
   _build_pipeline_status() helper.
 - Add resolve_target_slide_count() helper in handlers/common.py to
@@ -296,19 +296,19 @@ feat: feedback flow, 5-step pipeline status, slide count setting
 
 Если нужно проверить, что бот жив:
 ```bash
-ssh root@5.253.188.164 'docker logs karusel_bot_new --tail 30'
+ssh root@<SERVER_IP> 'docker logs karusel_bot_new --tail 30'
 ```
 
 Если нужно отправить тестовое сообщение в Telegram-бот (как я делал в этой сессии через MCP `telegram_send_message`):
-```python
-# Chat id владельца: 8918241849 (karusel_new)
-# User id: 252202
-telegram_send_message(chat_id="8918241849", text="🚀 Insta Auto")
-```
+ ```python
+# Chat id владельца: <REDACTED>
+# User id: <REDACTED>
+telegram_send_message(chat_id="<REDACTED>", text="🚀 Insta Auto")
+ ```
 
 Если нужно перерендерить PNG локально для проверки CSS-фиксов:
 ```bash
-cd /Users/ilyachumachenkov/Documents/контент\ мопед/karusel_bot
+cd /Users/<USER>/Documents/контент\ мопед/karusel_bot
 source .venv/bin/activate
 python3 -c "
 from services.html_renderer import build_slide_html
@@ -345,7 +345,7 @@ print('OK → /tmp/test.png')
 
 ## Контекст разговора с пользователем
 
-Пользователь (Илья, user_id=252202) попросил:
+Пользователь (Илья, user_id=<ADMIN_ID>) попросил:
 1. Добавить кнопку «📬 Обратная связь» → пересылать админу.
 2. Задеплоить бота (через cat|ssh, не rsync).
 3. Провести аудит продакшен-готовности.

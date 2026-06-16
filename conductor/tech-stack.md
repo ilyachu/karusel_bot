@@ -47,6 +47,6 @@
 ## Deployment
 
 - Docker Compose (see `docker-compose.yml`)
-- Production: `root@5.253.188.164` at `/root/karusel_bot_v2`
+- Production: `root@<SERVER_IP>` at `/root/karusel_bot_v2`
 - Container: `karusel_bot_new`
 - All shell commands in this repo use the `rtk` prefix

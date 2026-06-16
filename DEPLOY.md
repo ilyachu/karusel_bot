@@ -45,7 +45,7 @@ rsync -avz \
   middlewares \
   assets \
   main.py config.py requirements.txt Dockerfile docker-compose.yml README.md DEPLOY.md \
-  root@5.253.188.164:/root/karusel_bot_v2/
+  root@<SERVER_IP>:/root/karusel_bot_v2/
 ```
 
 Or run bundled script:

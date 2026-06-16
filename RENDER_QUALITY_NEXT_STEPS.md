@@ -13,14 +13,14 @@ Custom-background carousel output is visually unstable:
 
 Evidence from production exports:
 
-- `/root/karusel_bot_v2/data/exports/20260615-150852-252202-переписки-в-telegram-и-whatsapp-выпадают-из-crm-/metadata.json`
+- `/root/karusel_bot_v2/data/exports/20260615-150852-<ADMIN_ID>-переписки-в-telegram-и-whatsapp-выпадают-из-crm-/metadata.json`
 - `render_mode=html-custom-bg`, `custom_background=True`, `preset_background_ids=[]`, `slides=4`
 - Every AI `html_body` root section had `root_no_padding=True`.
 - Every AI `html_body` had low-opacity styling patterns.
 
 Related non-custom export:
 
-- `/root/karusel_bot_v2/data/exports/20260615-151106-252202-переписки-в-telegram-и-whatsapp-выпадают-из-crm-/metadata.json`
+- `/root/karusel_bot_v2/data/exports/20260615-151106-<ADMIN_ID>-переписки-в-telegram-и-whatsapp-выпадают-из-crm-/metadata.json`
 - `render_mode=html`, `custom_background=False`, auto presets used.
 
 ## Root Cause
