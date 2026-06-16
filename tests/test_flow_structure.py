@@ -246,6 +246,131 @@ class FlowStructureTests(unittest.TestCase):
 
         self.assertNotIn("Для полноценных слайдов установите Chromium.", source)
 
+    # ------------------------------------------------------------------
+    # Experimental carousel pipeline (track: experimental-carousel-pipeline)
+    # ------------------------------------------------------------------
+
+    def test_experimental_renderer_module_exists(self):
+        from pathlib import Path
+
+        module_path = PROJECT_ROOT / "services" / "experimental_carousel_renderer.py"
+        self.assertTrue(
+            module_path.exists(),
+            f"Expected {module_path} to exist on disk.",
+        )
+
+        import importlib
+
+        module = importlib.import_module(
+            "services.experimental_carousel_renderer"
+        )
+        for symbol in (
+            "ExperimentalSlide",
+            "build_experimental_slide_html",
+            "map_layout_spec_to_experimental_slide",
+            "render_experimental_carousel",
+        ):
+            self.assertTrue(
+                hasattr(module, symbol),
+                f"services.experimental_carousel_renderer must export {symbol}",
+            )
+
+    def test_experimental_render_button_is_in_admin_block(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+
+        # The button text and callback prefix must both exist in source.
+        for label in ("🧪 Dark+Teal", "🧪 Paper+Orange", "🧪 White+Coral"):
+            self.assertIn(f'"{label}"', source)
+
+        # And the button rows must live inside the admin gate, not as
+        # top-level rows visible to all users.
+        admin_gate_marker = "if message.from_user and message.from_user.id == ADMIN_ID:"
+        admin_start = source.find(admin_gate_marker)
+        self.assertNotEqual(admin_start, -1, "Admin gate not found in carousel_flow.py")
+
+        # The block ends right before the assignment of `actions`.
+        actions_marker = "actions = InlineKeyboardMarkup(inline_keyboard=action_rows)"
+        actions_pos = source.find(actions_marker, admin_start)
+        self.assertNotEqual(actions_pos, -1)
+
+        block = source[admin_start:actions_pos]
+        for label in ("🧪 Dark+Teal", "🧪 Paper+Orange", "🧪 White+Coral"):
+            self.assertIn(f'"{label}"', block)
+        self.assertIn("carousel_exp_render:", block)
+
+    def test_experimental_render_callback_handler_exists(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        self.assertIn("async def carousel_experimental_render", source)
+        self.assertIn('F.data.startswith("carousel_exp_render:")', source)
+
+    def test_experimental_renderer_persists_custom_background_data_url(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+
+        # Additive: a second update_export_metadata call must save the
+        # custom-background data URL so the experimental renderer can
+        # re-render with the same image.
+        self.assertIn("custom_background_data_url", source)
+        self.assertIn("update_export_metadata", source)
+        # The data URL must come from the same image_bytes_to_data_url helper
+        # already used elsewhere in the file.
+        self.assertIn("image_bytes_to_data_url", source)
+
+    def test_production_html_renderer_changes_are_preserved(self):
+        """Guard against accidental revert of the readability fix in
+        services/html_renderer.py and tests/test_html_renderer.py."""
+
+        renderer_source = (PROJECT_ROOT / "services" / "html_renderer.py").read_text(
+            encoding="utf-8"
+        )
+        tests_source = (PROJECT_ROOT / "tests" / "test_html_renderer.py").read_text(
+            encoding="utf-8"
+        )
+
+        # Markers that came with the readability fix (uncommitted at handoff time).
+        self.assertIn("_external_background_text_guard_css", renderer_source)
+        self.assertIn("rgba(7, 10, 18, 0.56)", renderer_source)
+        self.assertIn(
+            "test_build_slide_html_forces_readable_ai_text_on_external_background",
+            tests_source,
+        )
+        self.assertIn(
+            "test_build_slide_html_softens_ai_root_background_for_external_bg",
+            tests_source,
+        )
+
+    # ------------------------------------------------------------------
+    # Experimental style-system track (exp-renderer-style-system)
+    # ------------------------------------------------------------------
+
+    def test_three_experimental_style_buttons_exist(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        self.assertIn('"🧪 Dark+Teal"', source)
+        self.assertIn('"🧪 Paper+Orange"', source)
+        self.assertIn('"🧪 White+Coral"', source)
+
+        # All three buttons must live inside the admin gate.
+        admin_gate_marker = "if message.from_user and message.from_user.id == ADMIN_ID:"
+        admin_start = source.find(admin_gate_marker)
+        self.assertNotEqual(admin_start, -1)
+        actions_pos = source.find(
+            "actions = InlineKeyboardMarkup(inline_keyboard=action_rows)", admin_start
+        )
+        self.assertNotEqual(actions_pos, -1)
+        block = source[admin_start:actions_pos]
+        for label in ("Dark+Teal", "Paper+Orange", "White+Coral"):
+            self.assertIn(label, block)
+
+    def test_experimental_callback_supports_three_segments(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        self.assertIn("carousel_exp_render:{export_id}:dark_teal", source)
+        self.assertIn("carousel_exp_render:{export_id}:paper_orange", source)
+        self.assertIn("carousel_exp_render:{export_id}:white_coral", source)
+
+    def test_experimental_renderer_exports_style_presets_dict(self):
+        from services.experimental_carousel_renderer import STYLE_PRESETS
+
+        self.assertEqual(set(STYLE_PRESETS.keys()), {"dark_teal", "paper_orange", "white_coral"})
+
 
 if __name__ == "__main__":
     unittest.main()

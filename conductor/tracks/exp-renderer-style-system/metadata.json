@@ -1,0 +1,38 @@
+{
+  "track_id": "exp-renderer-style-system",
+  "title": "4-axis style system + 3-style inline preview for the experimental renderer",
+  "status": "verified",
+  "approved_at": "2026-06-16",
+  "updated_at": "2026-06-16",
+  "owner": "conductor",
+  "depends_on": "experimental-carousel-pipeline (must be deployed as baseline first)",
+  "decisions": {
+    "schema_source": "itchernetski/threads-carousel-claude-skill presets.ts (4-axis: font x surface x accent x background)",
+    "presets_v1": ["dark_teal", "paper_orange", "white_coral"],
+    "button_layout": "3 buttons in admin block, 2+1 rows (Dark+Teal, Paper+Orange, White+Coral)",
+    "callback_format": "carousel_exp_render:<export_id>:<style_id>; 2-segment form falls back to dark_teal for back-compat",
+    "highlight_words": "ExperimentalSlide.highlights new field; rendered as <span class='hl'> with style.accent_color",
+    "light_surface_external_bg": "uses dark overlay rgba(7,10,18,0.62->0.76) to keep readability",
+    "back_compat": "DEFAULT_STYLE = STYLE_PRESETS['dark_teal']; existing 18 tests untouched"
+  },
+  "files_to_create": [],
+  "files_to_modify": [
+    "services/experimental_carousel_renderer.py",
+    "handlers/carousel_flow.py",
+    "tests/test_experimental_carousel_renderer.py",
+    "tests/test_flow_structure.py"
+  ],
+  "files_preserved_uncommitted": [
+    "services/html_renderer.py",
+    "tests/test_html_renderer.py"
+  ],
+  "out_of_scope": [
+    "production deploy",
+    "more than 3 style presets",
+    "new slide types (quote/number/stats/checklist)",
+    "cover_flow changes",
+    "removing readability fix",
+    "cleanup of accumulated experimental export packages"
+  ],
+  "next_step": "running conductor_implement (tasks 1..10) then deploy"
+}

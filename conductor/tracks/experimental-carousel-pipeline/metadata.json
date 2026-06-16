@@ -1,0 +1,37 @@
+{
+  "track_id": "experimental-carousel-pipeline",
+  "title": "Experimental deterministic carousel renderer behind a separate test button",
+  "status": "approved",
+  "created_at": "2026-06-16",
+  "updated_at": "2026-06-16",
+  "owner": "conductor",
+  "approved_at": "2026-06-16",
+  "source_handoff": "HANDOFF_EXPERIMENTAL_CAROUSEL_PIPELINE_2026-06-16.md",
+  "decisions": {
+    "button_visibility": "admin only (callback.from_user.id == ADMIN_ID); diverges from handoff which suggested 'user who generated'",
+    "export_package": "new export with suffix and render_mode='experimental-datatalks'",
+    "density_high_fallback": "fall back to type='body' when no safe split",
+    "ai_html_body": "ignored entirely; experimental renderer is the control variable",
+    "smoke_render": "optional manual step in plan task 7"
+  },
+  "files_to_create": [
+    "services/experimental_carousel_renderer.py",
+    "tests/test_experimental_carousel_renderer.py"
+  ],
+  "files_to_modify": [
+    "handlers/carousel_flow.py",
+    "tests/test_flow_structure.py"
+  ],
+  "files_preserved_uncommitted": [
+    "services/html_renderer.py",
+    "tests/test_html_renderer.py"
+  ],
+  "out_of_scope": [
+    "production deploy",
+    "preset_background_data_url persistence (v2)",
+    "new runtime dependencies",
+    "cover_flow / cover_renderer changes",
+    "removing readability fix"
+  ],
+  "next_step": "running conductor_implement: tasks 1..8 in plan.md"
+}

@@ -12,7 +12,7 @@ from utils.validation import validate_text_length, validate_file_size
 import logging
 import os
 from io import BytesIO
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from config import (
     EXPORT_PUBLIC_BASE_URL,
     INSTAGRAM_ACCESS_TOKEN,
@@ -54,9 +54,11 @@ from services.layout_engine import (
     apply_theme_override,
     build_fallback_instagram_plan,
     build_instagram_layout_specs,
+    CarouselPlan,
     enforce_default_cta_slide,
     parse_carousel_plan,
     resolve_visual_mode,
+    SlidePlanEntry,
 )
 from services.background_registry import (
     load_background_preset_buffer,
@@ -65,6 +67,7 @@ from services.background_registry import (
 )
 from services.html_renderer import render_layout_spec_html
 from services.cover_renderer import image_bytes_to_data_url
+from services.experimental_carousel_renderer import render_experimental_carousel
 from services.instagram_publisher import InstagramPublisher
 from services.meta_publish import MetaCredentials, build_carousel_publish_plan, load_export_package
 from services.threads_publish import build_threads_publish_plan, serialize_threads_publish_plan
@@ -498,6 +501,11 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
             export_dir,
             {"telegram_media_items": telegram_media_items},
         )
+    if custom_background_data_url:
+        update_export_metadata(
+            export_dir,
+            {"custom_background_data_url": custom_background_data_url},
+        )
     action_rows = []
     if message.from_user and message.from_user.id == ADMIN_ID:
         action_rows.append(
@@ -508,6 +516,15 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         )
         action_rows.append(
             [InlineKeyboardButton(text="🛰 Advanced Meta plan", callback_data=f"meta_prepare:{export_id}")]
+        )
+        action_rows.append(
+            [
+                InlineKeyboardButton(text="🧪 Dark+Teal", callback_data=f"carousel_exp_render:{export_id}:dark_teal"),
+                InlineKeyboardButton(text="🧪 Paper+Orange", callback_data=f"carousel_exp_render:{export_id}:paper_orange"),
+            ]
+        )
+        action_rows.append(
+            [InlineKeyboardButton(text="🧪 White+Coral", callback_data=f"carousel_exp_render:{export_id}:white_coral")]
         )
     actions = InlineKeyboardMarkup(inline_keyboard=action_rows) if action_rows else None
     unique_presets = list(dict.fromkeys(preset_background_ids))
@@ -732,3 +749,163 @@ async def threads_prepare_publish(callback: types.CallbackQuery):
         f"Job ID: {job_id}\n"
         f"Ошибка: {result.error_message}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Experimental carousel renderer (separate test path)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _ExperimentalExportPackage:
+    pngs: list[bytes]
+    export_id: str
+    export_dir: str
+
+
+def _rebuild_carousel_plan(plan_dict: dict) -> CarouselPlan:
+    """Rebuild a ``CarouselPlan`` from a dict (e.g. from metadata)."""
+    slides_data = plan_dict.get("slides", []) or []
+    slides = [SlidePlanEntry(**slide) for slide in slides_data]
+    plan_kwargs = {key: value for key, value in plan_dict.items() if key != "slides"}
+    plan_kwargs["slides"] = slides
+    return CarouselPlan(**plan_kwargs)
+
+
+def _build_experimental_export_package(
+    export_record: dict,
+    style: "StylePreset",
+) -> _ExperimentalExportPackage:
+    """Build a new export package by re-rendering the saved plan through
+    the experimental deterministic renderer in the chosen style.
+
+    Pure / sync / side-effect-on-disk. Caller is expected to wrap in
+    ``asyncio.to_thread(...)`` from an async handler.
+    """
+
+    package = load_export_package(export_record["export_dir"])
+    metadata = package.metadata
+
+    plan = _rebuild_carousel_plan(metadata.get("carousel_plan") or {})
+    layout_specs = build_instagram_layout_specs(
+        plan,
+        visual_mode=plan.theme_hint,
+        layout_style=plan.layout_style,
+    )
+
+    chat_id = int(export_record["chat_id"])
+    user_id = chat_id
+    try:
+        logo_text = get_user_logo(user_id) or "chu ai"
+    except Exception:
+        logo_text = "chu ai"
+
+    custom_bg_data_url = (metadata.get("custom_background_data_url") or "").strip()
+    preset_data_url = ""
+    # Preset background data URLs are not persisted in metadata in v1;
+    # pass an empty string so the experimental renderer falls back to the
+    # styled surface. Custom background is the variable we want to A/B test.
+
+    pngs = render_experimental_carousel(
+        layout_specs,
+        logo_text=logo_text,
+        custom_background_data_url=custom_bg_data_url,
+        preset_background_data_url=preset_data_url,
+        style=style,
+    )
+
+    source_text = metadata.get("source_text", "") or "carousel"
+    caption_text = package.caption or ""
+    png_buffers = [BytesIO(png) for png in pngs]
+    # Append the style id to the slug so admins can tell experimental
+    # exports apart on disk.
+    slug_source = (source_text[:60] if source_text else "carousel") + f"-{style.id}"
+    new_export_dir = build_instagram_export(
+        png_buffers,
+        caption_text,
+        slug_source,
+        chat_id,
+        extra_metadata={
+            "render_mode": f"experimental-datatalks-{style.id}",
+            "parent_export_id": export_record["export_id"],
+            "style_id": style.id,
+            "style_label": style.label,
+            "carousel_plan": asdict(plan),
+            "layout_specs": [spec.to_dict() for spec in layout_specs],
+        },
+    )
+    new_package = load_export_package(new_export_dir)
+    new_metadata = new_package.metadata
+    new_export_id = new_metadata["export_id"]
+    save_export_package(
+        export_id=new_export_id,
+        chat_id=chat_id,
+        export_dir=new_export_dir,
+        export_slug=new_metadata["export_slug"],
+        theme=plan.theme_hint,
+        render_mode=f"experimental-datatalks-{style.id}",
+    )
+    return _ExperimentalExportPackage(
+        pngs=pngs,
+        export_id=new_export_id,
+        export_dir=new_export_dir,
+    )
+
+
+@router.callback_query(F.data.startswith("carousel_exp_render:"))
+async def carousel_experimental_render(callback: types.CallbackQuery):
+    await callback.answer()
+    if not (callback.from_user and callback.from_user.id == ADMIN_ID):
+        await callback.message.answer("⚠️ Тестовый рендер доступен только админу.")
+        return
+
+    # Callback format: carousel_exp_render:<export_id>[:<style_id>]
+    # Older 2-segment form falls back to dark_teal for cached buttons.
+    parts = callback.data.split(":", 2)
+    export_id = parts[1]
+    style_id = parts[2] if len(parts) >= 3 else "dark_teal"
+
+    from services.experimental_carousel_renderer import STYLE_PRESETS
+
+    style = STYLE_PRESETS.get(style_id)
+    if not style:
+        await callback.message.answer(f"⚠️ Неизвестный стиль: {style_id}.")
+        return
+
+    export_record = get_export_package(export_id)
+    if not export_record:
+        await callback.message.answer(
+            "⚠️ Export package не найден. Сгенерируйте карусель заново."
+        )
+        return
+
+    status = await callback.message.answer(f"🧪 {style.label} — рендерю…")
+    try:
+        package = await asyncio.to_thread(
+            _build_experimental_export_package,
+            export_record,
+            style,
+        )
+    except Exception as exc:
+        logging.exception("Experimental render failed for export %s", export_id)
+        await status.edit_text(f"⚠️ {style.label} не удался: {exc}")
+        return
+
+    media_group = [
+        InputMediaPhoto(
+            media=BufferedInputFile(
+                png,
+                filename=f"experimental_slide_{index+1:02d}.png",
+            )
+        )
+        for index, png in enumerate(package.pngs)
+    ]
+    if not media_group:
+        await status.edit_text("⚠️ Нечего рендерить: пустой набор слайдов.")
+        return
+    await callback.message.answer_media_group(media_group)
+    await callback.message.answer(
+        f"🧪 {style.label}. Сравни с обычным и с другими пресетами.\n\n"
+        f"Export: {package.export_id}"
+    )
+    await status.edit_text(f"✅ {style.label} готов.")
