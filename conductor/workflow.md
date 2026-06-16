@@ -33,12 +33,19 @@
 ## Production-Only Changes
 
 - Production server: `root@5.253.188.164` → `/root/karusel_bot_v2` → container `karusel_bot_new`.
-- Deploy only after user explicit "go ahead". Use:
+- The bot image bakes the code via `COPY . .` in `Dockerfile`. **Code is NOT mounted** into the running container — only `./data:/app/data` is. So **a `docker compose restart` is NOT enough** to pick up code changes; the image must be rebuilt and the container recreated.
+- Deploy only after user explicit "go ahead". Use the **rebuild sequence**:
   ```bash
+  # 1. Copy changed source files to the host.
   rtk sh -c 'cat <local_file> | ssh root@5.253.188.164 "cat > /root/karusel_bot_v2/<remote_path>"'
+  # Repeat for every changed file. Do NOT rely on `restart`.
+  # 2. Stop, rebuild, and recreate the container (this is the only step that actually applies code).
   rtk ssh root@5.253.188.164 'cd /root/karusel_bot_v2 && docker compose down bot && docker compose up -d --build bot'
+  # 3. Verify: imports resolve, polling started, no traceback.
   rtk ssh root@5.253.188.164 'cd /root/karusel_bot_v2 && docker compose logs --tail=100 bot'
+  rtk ssh root@5.253.188.164 'cd /root/karusel_bot_v2 && docker compose exec bot python -c "from utils.states import TestRenderFlow; print(TestRenderFlow.waiting_for_text.state)"'
   ```
+- `docker compose restart bot` looks like it works but silently keeps the **previous** image. Always use `down + up -d --build`.
 - Never `rsync`. Never commit secrets.
 
 ## Handoff Discipline
