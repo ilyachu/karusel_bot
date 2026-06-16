@@ -989,18 +989,21 @@ async def _generate_test_render_plan(
 async def cmd_test_render(message: types.Message, state: FSMContext):
     """Entry point for the test-render mini-FSM.
 
-    Triggered by the '🧪 Тестовый рендер' main-menu button or the
-    /test_render command. Restricted to ``ADMIN_ID`` by the caller.
+    Triggered by the '🆕 Карусель NEW' main-menu button or the
+    /test_render command. Available to any user in the allowed_users
+    list (admins are also in the list).
     """
 
-    if not (message.from_user and message.from_user.id == ADMIN_ID):
-        await message.answer("⚠️ Тестовый рендер доступен только админу.")
+    from utils.database import is_user_allowed
+
+    if not (message.from_user and is_user_allowed(message.from_user.id)):
+        await message.answer("⛔️ У вас нет доступа к этому боту.")
         return
 
     await state.clear()
     await state.set_state(TestRenderFlow.waiting_for_text)
     await message.answer(
-        "🧪 Тестовый рендер. Пришли текст для карусели (или голосовое сообщение).\n"
+        "🆕 Карусель NEW. Пришли текст для карусели (или голосовое сообщение).\n"
         "Я покажу превью 3 стилей. Чтобы выйти, нажми /start."
     )
 

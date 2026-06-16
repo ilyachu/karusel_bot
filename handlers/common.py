@@ -6,7 +6,7 @@ from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
-from utils.database import get_user_logo, set_user_logo, reset_user_logo
+from utils.database import get_user_logo, is_user_allowed, set_user_logo, reset_user_logo
 from utils.states import CarouselFlow
 from utils.validation import validate_text_length
 from services.layout_engine import LAYOUT_STYLE_LABELS
@@ -205,13 +205,21 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     kb = [
         [KeyboardButton(text="🚀 Insta Auto")],
-        [KeyboardButton(text="🖼 Обложка")],
-        [KeyboardButton(text="🎨 Настройки логотипа")],
-        [KeyboardButton(text="📬 Обратная связь")],
-        [KeyboardButton(text="Помощь")]
     ]
+    # The "🆕 Карусель NEW" button is available to all allowed users
+    # (admins are also in the allowed list, so this is a superset of
+    # the previous admin-only gate).
+    if is_user_allowed(message.from_user.id):
+        kb.append([KeyboardButton(text="🆕 Карусель NEW")])
+    kb.extend(
+        [
+            [KeyboardButton(text="🖼 Обложка")],
+            [KeyboardButton(text="🎨 Настройки логотипа")],
+            [KeyboardButton(text="📬 Обратная связь")],
+            [KeyboardButton(text="Помощь")],
+        ]
+    )
     if message.from_user.id == ADMIN_ID:
-        kb.append([KeyboardButton(text="🧪 Тестовый рендер")])
         kb.append([KeyboardButton(text="/admin")])
     keyboard = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
     await message.answer(
@@ -223,17 +231,29 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 @router.message(Command("test_render"))
 async def cmd_test_render_command(message: types.Message, state: FSMContext):
-    """Admin-only command shortcut for the experimental renderer."""
+    """Command shortcut for the experimental renderer.
+
+    Available to all allowed users (not just admins).
+    """
     from handlers.carousel_flow import cmd_test_render
 
+    if not is_user_allowed(message.from_user.id):
+        await message.answer("⛔️ У вас нет доступа к этому боту.")
+        return
     await cmd_test_render(message, state)
 
 
-@router.message(F.text == "🧪 Тестовый рендер")
+@router.message(F.text == "🆕 Карусель NEW")
 async def cmd_test_render_menu(message: types.Message, state: FSMContext):
-    """Main-menu entry to the experimental renderer (admin only)."""
+    """Main-menu entry to the experimental renderer.
+
+    Available to all allowed users.
+    """
     from handlers.carousel_flow import cmd_test_render
 
+    if not is_user_allowed(message.from_user.id):
+        await message.answer("⛔️ У вас нет доступа к этому боту.")
+        return
     await cmd_test_render(message, state)
 
 

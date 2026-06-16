@@ -402,20 +402,31 @@ class FlowStructureTests(unittest.TestCase):
             "TestRenderFlow:waiting_for_text",
         )
 
-    def test_test_render_menu_button_is_admin_only(self):
+    def test_test_render_menu_button_uses_allowed_gate(self):
+        """The '🆕 Карусель NEW' button must be added inside the
+        ``is_user_allowed`` gate, not the ``ADMIN_ID`` gate.
+        """
+
         source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
-        self.assertIn('"🧪 Тестовый рендер"', source)
-        # The button must be added inside the cmd_start admin gate.
+        self.assertIn('"🆕 Карусель NEW"', source)
+        # The button must live inside the is_user_allowed check, NOT the
+        # admin-only /admin check below.
+        allowed_marker = "if is_user_allowed(message.from_user.id):"
+        allowed_start = source.find(allowed_marker)
+        self.assertNotEqual(allowed_start, -1, "is_user_allowed gate not found in cmd_start")
+        # Look at the next ~600 chars (covers the kb.append line).
+        block = source[allowed_start:allowed_start + 600]
+        self.assertIn("🆕 Карусель NEW", block)
+        # And the button text must NOT be inside the admin gate.
         admin_start = source.find("if message.from_user.id == ADMIN_ID:")
-        self.assertNotEqual(admin_start, -1, "Admin gate not found in cmd_start")
-        # Find the closing of this block: kb.append for /admin, then ].
-        block = source[admin_start:admin_start + 600]
-        self.assertIn("🧪 Тестовый рендер", block)
+        self.assertNotEqual(admin_start, -1)
+        admin_block = source[admin_start:admin_start + 600]
+        self.assertNotIn("🆕 Карусель NEW", admin_block)
 
     def test_test_render_command_and_handlers_exist(self):
         source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
         self.assertIn('Command("test_render")', source)
-        self.assertIn("F.text == \"🧪 Тестовый рендер\"", source)
+        self.assertIn("F.text == \"🆕 Карусель NEW\"", source)
 
     def test_test_render_callback_handler_uses_fsm_state(self):
         source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")

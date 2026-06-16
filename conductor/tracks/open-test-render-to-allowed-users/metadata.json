@@ -1,0 +1,36 @@
+{
+  "track_id": "open-test-render-to-allowed-users",
+  "title": "Open the 🆕 Карусель NEW entry point to all allowed users; lift the button to the top of the main menu",
+  "status": "shipped",
+  "created_at": "2026-06-16",
+  "updated_at": "2026-06-16",
+  "shipped_at": "2026-06-16",
+  "owner": "conductor",
+  "decisions": {
+    "button_text": "🆕 Карусель NEW",
+    "position": "second row in main menu (right after 🚀 Insta Auto)",
+    "visibility": "all users in allowed_users list (admins included by default)",
+    "functionality_gate": "is_user_allowed(user.id) in cmd_test_render, cmd_test_render_command, cmd_test_render_menu",
+    "renamed_from": "🧪 Тестовый рендер",
+    "production_intact": "insta_auto flow untouched"
+  },
+  "files_to_modify": [
+    "handlers/common.py",
+    "handlers/carousel_flow.py",
+    "tests/test_flow_structure.py"
+  ],
+  "files_preserved_uncommitted": [
+    "services/html_renderer.py",
+    "tests/test_html_renderer.py"
+  ],
+  "out_of_scope": [
+    "rate limiting per user",
+    "telemetry / analytics",
+    "insta_auto changes"
+  ],
+  "verification": {
+    "local_tests": "rtk pytest tests/ — 152 passed, 0 failed",
+    "deploy_procedure": "docker compose down bot && docker compose up -d --build bot",
+    "container_smoke": "TestRenderFlow + cmd_test_render importable inside the new container"
+  }
+}
