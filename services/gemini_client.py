@@ -5,6 +5,10 @@ import re
 from copy import deepcopy
 
 from openai import AsyncOpenAI
+from services.carousel_content_guidelines import (
+    clamp_carousel_plan_dict,
+    content_limits_prompt_block,
+)
 from services.cover_renderer import normalize_cover_plan
 
 from config import (
@@ -255,6 +259,7 @@ async def generate_instagram_carousel_plan(
         color_palette=color_palette,
         visual_mode=visual_mode,
     )
+    content_limits_block = content_limits_prompt_block()
     prompt = f"""Собери JSON-план карусели из {target_slides_count} слайдов:
 {{"carousel": {{"goal": "instagram_carousel", "audience": "...", "tone": "clear_confident|bold_creator|premium_editorial", "theme_hint": "business_dark|minimal_light|creator_bold|editorial_premium|memory_archive|founder_brief|growth_black|research_mono", "cta": "save_and_follow|comment_and_dm|share_and_follow", "layout_style": "magazine|terminal|poster|carddeck"}}, "slides": [{{"index": 1, "role": "hook|context|point|proof|example|checklist|cta", "title": "...", "body": "...", "emphasis": ["..."], "supporting_cards": [{{"title": "1-2 слова", "body": "до 6 слов"}}], "density": "low|medium|high", "theme_hint": "...", "archetype": "hero_center|split_story|checklist_stack|stat_panel|quote_poster|timeline_steps|comparison_grid|soft_cta"}}]}}
 
@@ -274,6 +279,7 @@ async def generate_instagram_carousel_plan(
 - timeline_steps: 2-4 последовательных шага
 - comparison_grid: сравнение или пример/антипример
 - soft_cta: спокойный финальный CTA
+{content_limits_block}
 {settings_block}
 
 Текст:
@@ -282,6 +288,7 @@ async def generate_instagram_carousel_plan(
     try:
         result = await _router_json_request(prompt)
         result = await _normalize_carousel_plan_language(base_text, result)
+        result = clamp_carousel_plan_dict(result)
         return await attach_slide_html_to_plan(
             base_text,
             result,
@@ -296,6 +303,7 @@ async def generate_instagram_carousel_plan(
     try:
         result = await _openai_json_request(prompt)
         result = await _normalize_carousel_plan_language(base_text, result)
+        result = clamp_carousel_plan_dict(result)
         return await attach_slide_html_to_plan(
             base_text,
             result,

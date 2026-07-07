@@ -29,7 +29,11 @@ import zlib
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from services.layout_engine import LayoutSpec
+from services.background_registry import (
+    load_background_preset_data_url,
+    pick_background_preset,
+)
+from services.layout_engine import LayoutSpec, _extract_stat_token
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +218,28 @@ STYLE_PRESETS: dict[str, StylePreset] = {
         accent_color=ACCENTS["coral"],
         background_css=_render_background_css("dots", ACCENTS["coral"]),
     ),
+    "ember_violet": StylePreset(
+        id="ember_violet",
+        label="Ember+Violet",
+        font_family=FONT_STYLES["editorial"]["family"],
+        hook_font_family=None,
+        surface_bg=SURFACES["ember"]["bg"],
+        surface_text=SURFACES["ember"]["text"],
+        surface_text_secondary=SURFACES["ember"]["secondary"],
+        accent_color=ACCENTS["violet"],
+        background_css=_render_background_css("glow", ACCENTS["violet"]),
+    ),
+    "neon_lime": StylePreset(
+        id="neon_lime",
+        label="Neon+Lime",
+        font_family=FONT_STYLES["clean"]["family"],
+        hook_font_family=None,
+        surface_bg=SURFACES["neon"]["bg"],
+        surface_text=SURFACES["neon"]["text"],
+        surface_text_secondary=SURFACES["neon"]["secondary"],
+        accent_color=ACCENTS["lime"],
+        background_css=_render_background_css("grid", ACCENTS["lime"]),
+    ),
 }
 
 # Default style is the tech/dark look so existing tests keep passing.
@@ -229,8 +255,9 @@ DEFAULT_STYLE = STYLE_PRESETS["dark_teal"]
 class ExperimentalSlide:
     """The minimal schema for an experimental slide.
 
-    ``type`` is one of: ``hook``, ``body``, ``list``, ``cta``.
-    ``items`` is populated only for ``type="list"``.
+    ``type`` is one of: ``hook``, ``body``, ``list``, ``cta``, ``quote``,
+    ``stat``, ``comparison``.
+    ``items`` is populated for ``list`` / ``comparison`` layouts.
     ``highlights`` is copied from ``LayoutSpec.highlight_words`` and is used
     by the style system to color accent words in ``title`` / ``body`` / ``items``.
     """
@@ -242,6 +269,8 @@ class ExperimentalSlide:
     badge: str = ""
     highlight: str = ""
     highlights: tuple[str, ...] = field(default_factory=tuple)
+    supporting_cards: tuple[dict, ...] = field(default_factory=tuple)
+    archetype: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -278,49 +307,116 @@ def _split_bullets(body: str) -> tuple[str, ...]:
     return ()
 
 
+def _resolve_stat_copy(title: str, body: str) -> tuple[str, str]:
+    """Pick a prominent stat token and a short explanation line."""
+
+    title = (title or "").strip()
+    body = (body or "").strip()
+    stat = _extract_stat_token(f"{title} {body}")
+    if not stat:
+        return title, body
+    if stat in title:
+        explanation = body or title.replace(stat, "").strip(" —–-:")
+        return stat, explanation or body
+    return stat, title or body
+
+
+def _comparison_items_from_spec(spec: LayoutSpec) -> tuple[str, ...]:
+    cards = list(spec.supporting_cards or [])
+    if len(cards) >= 2:
+        left = f"{cards[0].get('title', '').strip()}: {cards[0].get('body', '').strip()}".strip(": ")
+        right = f"{cards[1].get('title', '').strip()}: {cards[1].get('body', '').strip()}".strip(": ")
+        return (left, right)
+
+    body = (spec.body or "").strip()
+    for separator in (" vs ", " / ", " | ", "\n"):
+        if separator in body:
+            left, right = body.split(separator, 1)
+            return (left.strip(), right.strip())
+    return (spec.title or "", body)
+
+
 def map_layout_spec_to_experimental_slide(
     spec: LayoutSpec,
     style: StylePreset | None = None,
 ) -> ExperimentalSlide:
     """Map a production ``LayoutSpec`` to an ``ExperimentalSlide``.
 
-    Mapping rules (from track spec §5):
+    Priority: ``role`` (hook/cta) -> ``archetype`` -> ``density`` -> body.
 
-    * ``role == "hook"``      -> ``type="hook"``
-    * ``role == "cta"``       -> ``type="cta"``
-    * ``density == "high"``   -> ``type="list"`` IF body splits safely,
-                                 else ``type="body"``
-    * default                 -> ``type="body"``
-
-    The LLM-generated ``spec.html_body`` is never read. ``style`` is
-    accepted for API symmetry; it currently only affects the returned
-    ``highlights`` set, not the slide type.
+    The LLM-generated ``spec.html_body`` is never read.
     """
 
-    # ``style`` is reserved for future per-slide overrides; at the moment
-    # only ``LayoutSpec.highlight_words`` drive highlights.
     _ = style
 
     highlights = tuple(word.strip() for word in (spec.highlight_words or ()) if word.strip())
-
+    supporting_cards = tuple(dict(card) for card in (spec.supporting_cards or []) if isinstance(card, dict))
+    archetype = (spec.archetype or "").strip().lower()
     role = (spec.role or "").strip().lower()
     density = (spec.density or "").strip().lower()
 
-    if role == "hook":
+    base_kwargs = {
+        "highlights": highlights,
+        "supporting_cards": supporting_cards,
+        "archetype": archetype,
+        "badge": spec.badge_text or "",
+    }
+
+    if role == "hook" or archetype == "hero_center":
         return ExperimentalSlide(
             type="hook",
             title=spec.title or "",
             body=spec.body or "",
-            badge=spec.badge_text or "",
-            highlights=highlights,
+            **base_kwargs,
         )
-    if role == "cta":
+    if role == "cta" or archetype == "soft_cta":
         return ExperimentalSlide(
             type="cta",
             title=spec.title or "",
             body=spec.body or "",
-            highlights=highlights,
+            **base_kwargs,
         )
+    if archetype == "stat_panel":
+        stat, explanation = _resolve_stat_copy(spec.title or "", spec.body or "")
+        return ExperimentalSlide(
+            type="stat",
+            title=stat,
+            body=explanation,
+            **base_kwargs,
+        )
+    if archetype == "quote_poster":
+        quote = (spec.body or "").strip() if len(spec.title or "") > 90 else (spec.title or "")
+        attribution = (spec.body or "") if quote != (spec.body or "") else ""
+        return ExperimentalSlide(
+            type="quote",
+            title=quote,
+            body=attribution,
+            **base_kwargs,
+        )
+    if archetype == "comparison_grid":
+        return ExperimentalSlide(
+            type="comparison",
+            title=spec.title or "",
+            body=spec.body or "",
+            items=_comparison_items_from_spec(spec),
+            **base_kwargs,
+        )
+    if archetype in {"checklist_stack", "timeline_steps"} or role == "checklist":
+        items = _split_bullets(spec.body or "")
+        if not items and supporting_cards:
+            items = tuple(
+                f"{card.get('title', '').strip()}: {card.get('body', '').strip()}".strip(": ")
+                for card in supporting_cards
+                if card.get("title") or card.get("body")
+            )
+        if items:
+            return ExperimentalSlide(
+                type="list",
+                title=spec.title or "",
+                body="",
+                items=items,
+                **base_kwargs,
+            )
 
     if density == "high":
         items = _split_bullets(spec.body or "")
@@ -330,20 +426,69 @@ def map_layout_spec_to_experimental_slide(
                 title=spec.title or "",
                 body="",
                 items=items,
-                highlights=highlights,
+                **base_kwargs,
             )
 
     return ExperimentalSlide(
         type="body",
         title=spec.title or "",
         body=spec.body or "",
-        highlights=highlights,
+        **base_kwargs,
     )
 
 
 # ---------------------------------------------------------------------------
 # HTML builder
 # ---------------------------------------------------------------------------
+
+
+def _title_font_size(title: str, slide_type: str) -> int:
+    length = len((title or "").strip())
+    if slide_type in {"quote", "hook"}:
+        if length <= 40:
+            return 72
+        if length <= 70:
+            return 60
+        if length <= 110:
+            return 52
+        return 44
+    if length <= 28:
+        return 72
+    if length <= 45:
+        return 64
+    if length <= 65:
+        return 56
+    return 48
+
+
+def _body_font_size(body: str, slide_type: str, item_count: int = 0) -> int:
+    length = len((body or "").strip())
+    if slide_type == "list":
+        if item_count >= 5:
+            return 26
+        if item_count >= 4:
+            return 28
+        return 30
+    if slide_type == "stat":
+        if length <= 80:
+            return 34
+        return 30
+    if length <= 90:
+        return 32
+    if length <= 160:
+        return 28
+    return 26
+
+
+def _stat_font_size(stat: str) -> int:
+    length = len((stat or "").strip())
+    if length <= 4:
+        return 132
+    if length <= 8:
+        return 112
+    if length <= 14:
+        return 96
+    return 80
 
 
 def _is_light_surface(surface_bg: str) -> bool:
@@ -429,7 +574,14 @@ def _wrap_highlights(text: str, highlights: tuple[str, ...]) -> str:
     return "".join(parts)
 
 
-def _shared_css(style: StylePreset, custom_or_preset: str) -> str:
+def _shared_css(
+    style: StylePreset,
+    custom_or_preset: str,
+    *,
+    title_size: int = 72,
+    body_size: int = 32,
+    stat_size: int = 112,
+) -> str:
     """Return CSS shared by every slide for the chosen style preset.
 
     ``custom_or_preset`` is the resolved data URL for an external
@@ -551,7 +703,7 @@ def _shared_css(style: StylePreset, custom_or_preset: str) -> str:
       margin-bottom: 24px;
     }}
     h1.title {{
-      font-size: 72px;
+      font-size: {title_size}px;
       line-height: 1.1;
       font-weight: 800;
       margin: 0 0 24px 0;
@@ -559,12 +711,12 @@ def _shared_css(style: StylePreset, custom_or_preset: str) -> str:
       opacity: 1;
       text-shadow: {text_shadow};
     }}
-    .slide.hook h1.title {{
+    .slide.hook h1.title, .slide.quote h1.title {{
       font-family: {style.hook_font_family or style.font_family}, -apple-system,
                    BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }}
     p.body {{
-      font-size: 32px;
+      font-size: {body_size}px;
       line-height: 1.4;
       font-weight: 500;
       margin: 0;
@@ -572,17 +724,85 @@ def _shared_css(style: StylePreset, custom_or_preset: str) -> str:
       opacity: 1;
       text-shadow: {text_shadow};
     }}
+    .stat-value {{
+      font-size: {stat_size}px;
+      line-height: 0.95;
+      font-weight: 800;
+      margin: 0 0 20px 0;
+      color: {style.accent_color};
+      letter-spacing: -0.03em;
+      text-shadow: {text_shadow};
+    }}
+    .quote-mark {{
+      font-size: {max(48, title_size // 2)}px;
+      line-height: 1;
+      color: {style.accent_color};
+      margin-bottom: 16px;
+      opacity: 0.9;
+    }}
     ul.items {{
       margin: 0;
       padding-left: 28px;
-      font-size: 32px;
+      font-size: {body_size}px;
       line-height: 1.5;
       font-weight: 500;
+    }}
+    ul.items.steps {{
+      list-style: none;
+      padding-left: 0;
+      counter-reset: step;
+    }}
+    ul.items.steps li {{
+      position: relative;
+      padding-left: 56px;
+      margin-bottom: 18px;
+    }}
+    ul.items.steps li::before {{
+      counter-increment: step;
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 2px;
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: {style.surface_text};
+      background: {style.accent_color}33;
+      border: 1px solid {style.accent_color}88;
     }}
     ul.items li {{
       margin-bottom: 12px;
       color: {style.surface_text};
       opacity: 1;
+      text-shadow: {text_shadow};
+    }}
+    .comparison-grid {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }}
+    .comparison-col {{
+      background: {panel_bg};
+      border: 1px solid {panel_border};
+      border-radius: 24px;
+      padding: 24px;
+      min-height: 180px;
+    }}
+    .comparison-col h2 {{
+      margin: 0 0 12px 0;
+      font-size: {max(24, body_size)}px;
+      color: {style.accent_color};
+      font-weight: 700;
+    }}
+    .comparison-col p {{
+      margin: 0;
+      font-size: {body_size}px;
+      line-height: 1.35;
+      color: {style.surface_text};
       text-shadow: {text_shadow};
     }}
     .hl {{
@@ -613,6 +833,11 @@ def _layout_html(
     total_slides: int,
     style: StylePreset,
     custom_or_preset: str,
+    *,
+    title_size: int = 72,
+    body_size: int = 32,
+    stat_size: int = 112,
+    archetype: str = "",
 ) -> str:
     """Wrap inner slide content in the standard 1080x1350 document."""
 
@@ -623,6 +848,7 @@ def _layout_html(
         overlay_block = '<div class="overlay"></div>'
 
     google_fonts = _google_fonts_link([style.font_family, style.hook_font_family])
+    archetype_class = f" archetype-{archetype}" if archetype else ""
 
     return (
         "<!doctype html>\n"
@@ -630,10 +856,10 @@ def _layout_html(
         "<head>\n"
         '<meta charset="utf-8">\n'
         f"{google_fonts}\n"
-        f'<style>{_shared_css(style, custom_or_preset)}</style>\n'
+        f"<style>{_shared_css(style, custom_or_preset, title_size=title_size, body_size=body_size, stat_size=stat_size)}</style>\n"
         "</head>\n"
         "<body>\n"
-        f'<div class="slide {slide_type}">\n'
+        f'<div class="slide {slide_type}{archetype_class}">\n'
         f"{bg_block}\n"
         f"{overlay_block}\n"
         '<div class="content">\n'
@@ -671,6 +897,7 @@ def _body_html(slide: ExperimentalSlide) -> str:
 
 
 def _list_html(slide: ExperimentalSlide) -> str:
+    list_class = "items steps" if slide.archetype in {"timeline_steps", "checklist_stack"} else "items"
     items_html = "\n".join(
         f"        <li>{_wrap_highlights(item, slide.highlights)}</li>"
         for item in slide.items
@@ -678,7 +905,48 @@ def _list_html(slide: ExperimentalSlide) -> str:
     return (
         '<div class="panel">'
         f'<h1 class="title">{_wrap_highlights(slide.title, slide.highlights)}</h1>'
-        f'      <ul class="items">\n{items_html}\n      </ul>'
+        f'      <ul class="{list_class}">\n{items_html}\n      </ul>'
+        "</div>"
+    )
+
+
+def _quote_html(slide: ExperimentalSlide) -> str:
+    attribution = (
+        f'<p class="body">{_wrap_highlights(slide.body, slide.highlights)}</p>'
+        if slide.body
+        else ""
+    )
+    return (
+        '<div class="panel">'
+        '<div class="quote-mark">“</div>'
+        f'<h1 class="title">{_wrap_highlights(slide.title, slide.highlights)}</h1>'
+        f"{attribution}"
+        "</div>"
+    )
+
+
+def _stat_html(slide: ExperimentalSlide) -> str:
+    return (
+        '<div class="panel">'
+        f'<p class="stat-value">{_wrap_highlights(slide.title, slide.highlights)}</p>'
+        f'<p class="body">{_wrap_highlights(slide.body, slide.highlights)}</p>'
+        "</div>"
+    )
+
+
+def _comparison_html(slide: ExperimentalSlide) -> str:
+    left = slide.items[0] if len(slide.items) > 0 else slide.title
+    right = slide.items[1] if len(slide.items) > 1 else slide.body
+    heading = ""
+    if slide.title and slide.title not in {left, right}:
+        heading = f'<h1 class="title">{_wrap_highlights(slide.title, slide.highlights)}</h1>'
+    return (
+        '<div class="panel">'
+        f"{heading}"
+        '<div class="comparison-grid">'
+        f'<div class="comparison-col"><h2>A</h2><p>{_wrap_highlights(left, slide.highlights)}</p></div>'
+        f'<div class="comparison-col"><h2>B</h2><p>{_wrap_highlights(right, slide.highlights)}</p></div>'
+        "</div>"
         "</div>"
     )
 
@@ -728,8 +996,22 @@ def build_experimental_slide_html(
         inner = _list_html(slide)
     elif slide.type == "cta":
         inner = _cta_html(slide)
+    elif slide.type == "quote":
+        inner = _quote_html(slide)
+    elif slide.type == "stat":
+        inner = _stat_html(slide)
+    elif slide.type == "comparison":
+        inner = _comparison_html(slide)
     else:
         inner = _body_html(slide)
+
+    title_size = _title_font_size(slide.title, slide.type)
+    body_size = _body_font_size(
+        slide.body,
+        slide.type,
+        item_count=len(slide.items),
+    )
+    stat_size = _stat_font_size(slide.title) if slide.type == "stat" else 112
 
     return _layout_html(
         slide_type=slide.type,
@@ -739,6 +1021,10 @@ def build_experimental_slide_html(
         total_slides=total_slides,
         style=active_style,
         custom_or_preset=custom_or_preset,
+        title_size=title_size,
+        body_size=body_size,
+        stat_size=stat_size,
+        archetype=slide.archetype,
     )
 
 
@@ -892,15 +1178,26 @@ def render_experimental_carousel(
 
     out: list[bytes] = []
     custom = (custom_background_data_url or "").strip()
-    preset = (preset_background_data_url or "").strip()
+    global_preset = (preset_background_data_url or "").strip()
 
     for index, spec in enumerate(specs, start=1):
+        slide_preset = global_preset
+        if not custom and not slide_preset:
+            preset = pick_background_preset(
+                layout_style=getattr(spec, "layout_style", "magazine") or "magazine",
+                theme_hint=getattr(spec, "theme", "business_dark") or "business_dark",
+                slide_role=getattr(spec, "role", "point") or "point",
+                archetype=getattr(spec, "archetype", "") or "",
+            )
+            if preset:
+                slide_preset = load_background_preset_data_url(preset.preset_id)
+
         slide = map_layout_spec_to_experimental_slide(spec, style=active_style)
         html_content = build_experimental_slide_html(
             slide,
             logo_text=logo_text,
             custom_background_data_url=custom,
-            preset_background_data_url=preset,
+            preset_background_data_url=slide_preset,
             slide_index=index,
             total_slides=total,
             style=active_style,

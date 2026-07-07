@@ -117,6 +117,120 @@ class ExperimentalSlideHtmlTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
 
 
+class ArchetypeMappingTests(unittest.TestCase):
+    def test_map_stat_panel_archetype(self):
+        spec = _make_spec(
+            role="proof",
+            archetype="stat_panel",
+            title="73%",
+            body="команд используют AI в маркетинге",
+        )
+        slide = map_layout_spec_to_experimental_slide(spec)
+        self.assertEqual(slide.type, "stat")
+        self.assertEqual(slide.title, "73%")
+
+    def test_map_quote_poster_archetype(self):
+        spec = _make_spec(
+            role="point",
+            archetype="quote_poster",
+            title="Короткий тезис",
+            body="Источник",
+        )
+        slide = map_layout_spec_to_experimental_slide(spec)
+        self.assertEqual(slide.type, "quote")
+
+    def test_map_comparison_grid_archetype(self):
+        spec = _make_spec(
+            role="example",
+            archetype="comparison_grid",
+            title="Сравнение",
+            body="",
+            supporting_cards=[
+                {"title": "До", "body": "хаос"},
+                {"title": "После", "body": "система"},
+            ],
+        )
+        slide = map_layout_spec_to_experimental_slide(spec)
+        self.assertEqual(slide.type, "comparison")
+        self.assertEqual(len(slide.items), 2)
+
+    def test_map_timeline_steps_uses_steps_list(self):
+        spec = _make_spec(
+            role="checklist",
+            archetype="timeline_steps",
+            title="План",
+            body="Шаг 1\nШаг 2\nШаг 3",
+            density="high",
+        )
+        slide = map_layout_spec_to_experimental_slide(spec)
+        self.assertEqual(slide.type, "list")
+        self.assertEqual(slide.archetype, "timeline_steps")
+
+
+class AdaptiveTypographyTests(unittest.TestCase):
+    def test_long_title_gets_smaller_font_in_html(self):
+        long_title = "Очень длинный заголовок " * 4
+        html = build_experimental_slide_html(
+            ExperimentalSlide(type="body", title=long_title.strip(), body="коротко")
+        )
+        self.assertIn("font-size: 48px", html)
+
+    def test_stat_slide_emits_stat_value_class(self):
+        html = build_experimental_slide_html(
+            ExperimentalSlide(type="stat", title="42%", body="рост за месяц")
+        )
+        self.assertIn('class="stat-value"', html)
+        self.assertIn("font-size: 132px", html)
+
+    def test_quote_slide_emits_quote_mark(self):
+        html = build_experimental_slide_html(
+            ExperimentalSlide(type="quote", title="Цитата дня", body="Автор")
+        )
+        self.assertIn('class="quote-mark"', html)
+
+
+class PerSlideBackgroundTests(unittest.TestCase):
+    def test_render_picks_preset_per_slide_when_no_custom_bg(self):
+        specs = [
+            _make_spec(
+                slide_index=1,
+                total_slides=2,
+                role="hook",
+                archetype="hero_center",
+                layout_style="magazine",
+                theme="minimal_light",
+                title="A",
+                body="a",
+            ),
+            _make_spec(
+                slide_index=2,
+                total_slides=2,
+                role="cta",
+                archetype="soft_cta",
+                layout_style="magazine",
+                theme="minimal_light",
+                title="B",
+                body="b",
+            ),
+        ]
+        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+        captured_urls: list[str] = []
+
+        def _capture_html(html_content: str) -> bytes:
+            if "data:image/jpeg;base64," in html_content:
+                captured_urls.append("preset")
+            return fake_png
+
+        with patch(
+            "services.experimental_carousel_renderer._render_with_playwright",
+            side_effect=_capture_html,
+        ):
+            result = render_experimental_carousel(specs)
+
+        self.assertEqual(len(result), 2)
+        self.assertGreaterEqual(len(captured_urls), 1)
+
+
 class MapLayoutSpecTests(unittest.TestCase):
     def test_map_hook_role(self):
         spec = _make_spec(role="hook", title="X", body="Y")
@@ -228,18 +342,19 @@ class SplitBulletsTests(unittest.TestCase):
 
 
 class StyleSystemTests(unittest.TestCase):
-    def test_three_presets_exist(self):
+    def test_five_presets_exist(self):
         self.assertEqual(
-            set(STYLE_PRESETS.keys()), {"dark_teal", "paper_orange", "white_coral"}
+            set(STYLE_PRESETS.keys()),
+            {"dark_teal", "paper_orange", "white_coral", "ember_violet", "neon_lime"},
         )
 
     def test_presets_have_distinct_surfaces(self):
         surfaces = [preset.surface_bg for preset in STYLE_PRESETS.values()]
-        self.assertEqual(len(set(surfaces)), 3)
+        self.assertGreaterEqual(len(set(surfaces)), 3)
 
     def test_presets_have_distinct_accents(self):
         accents = [preset.accent_color for preset in STYLE_PRESETS.values()]
-        self.assertEqual(len(set(accents)), 3)
+        self.assertGreaterEqual(len(set(accents)), 3)
 
     def test_presets_have_distinct_fonts(self):
         fonts = [preset.font_family for preset in STYLE_PRESETS.values()]

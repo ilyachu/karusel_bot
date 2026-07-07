@@ -382,13 +382,16 @@ class FlowStructureTests(unittest.TestCase):
         self.assertIn('"Paper+Orange"', source)
         self.assertIn('"White+Coral"', source)
         # The callback prefix is test_render_style:<id>, not carousel_exp_render:.
-        for style_id in ("dark_teal", "paper_orange", "white_coral"):
+        for style_id in ("dark_teal", "paper_orange", "white_coral", "ember_violet", "neon_lime"):
             self.assertIn(f"test_render_style:{style_id}", source)
 
     def test_experimental_renderer_exports_style_presets_dict(self):
         from services.experimental_carousel_renderer import STYLE_PRESETS
 
-        self.assertEqual(set(STYLE_PRESETS.keys()), {"dark_teal", "paper_orange", "white_coral"})
+        self.assertEqual(
+            set(STYLE_PRESETS.keys()),
+            {"dark_teal", "paper_orange", "white_coral", "ember_violet", "neon_lime"},
+        )
 
     # ------------------------------------------------------------------
     # Test-render entry point track (test-render-entry-point)

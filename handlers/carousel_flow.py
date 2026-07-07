@@ -39,6 +39,7 @@ from utils.database import (
     save_export_package,
 )
 
+from services.carousel_content_guidelines import clamp_carousel_plan
 from services.gemini_client import (
     attach_slide_html_to_plan,
     generate_final_slides,
@@ -320,6 +321,7 @@ async def run_insta_auto_pipeline(message: types.Message, text: str, state: FSMC
         carousel_plan = build_fallback_instagram_plan(slides_content)
     visual_mode = data.get("insta_visual_mode", "auto")
     carousel_plan = enforce_default_cta_slide(carousel_plan, visual_mode=visual_mode)
+    carousel_plan = clamp_carousel_plan(carousel_plan)
     slides_content = [
         {"title": slide.title, "body": slide.body}
         for slide in carousel_plan.slides
@@ -960,7 +962,11 @@ _TEST_RENDER_BUTTON_ROW = [
         InlineKeyboardButton(text="Paper+Orange", callback_data="test_render_style:paper_orange"),
     ],
     [
-        InlineKeyboardButton(text="White+Coral", callback_data="test_render_style:white_coral")
+        InlineKeyboardButton(text="White+Coral", callback_data="test_render_style:white_coral"),
+        InlineKeyboardButton(text="Ember+Violet", callback_data="test_render_style:ember_violet"),
+    ],
+    [
+        InlineKeyboardButton(text="Neon+Lime", callback_data="test_render_style:neon_lime"),
     ],
 ]
 
@@ -1020,6 +1026,7 @@ async def _generate_test_render_plan(
 
     carousel_plan = enforce_default_cta_slide(carousel_plan, visual_mode="auto")
     carousel_plan, _ = apply_theme_selection_policy(carousel_plan, text)
+    carousel_plan = clamp_carousel_plan(carousel_plan)
 
     layout_specs = build_instagram_layout_specs(
         carousel_plan,
