@@ -378,9 +378,9 @@ class FlowStructureTests(unittest.TestCase):
         # _TEST_RENDER_BUTTON_ROW, used by the test-render FSM.
         source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
         self.assertIn("_TEST_RENDER_BUTTON_ROW", source)
-        self.assertIn('"🧪 Dark+Teal"', source)
-        self.assertIn('"🧪 Paper+Orange"', source)
-        self.assertIn('"🧪 White+Coral"', source)
+        self.assertIn('"Dark+Teal"', source)
+        self.assertIn('"Paper+Orange"', source)
+        self.assertIn('"White+Coral"', source)
         # The callback prefix is test_render_style:<id>, not carousel_exp_render:.
         for style_id in ("dark_teal", "paper_orange", "white_coral"):
             self.assertIn(f"test_render_style:{style_id}", source)
@@ -515,6 +515,49 @@ class FlowStructureTests(unittest.TestCase):
         voice_end = source.find("async def ", voice_start + 1)
         voice_block = source[voice_start:voice_end]
         self.assertIn("TestRenderFlow.waiting_for_rewrite", voice_block)
+
+    def test_test_render_voice_downloads_file_before_transcription(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        voice_start = source.find("async def test_render_voice")
+        voice_end = source.find("async def ", voice_start + 1)
+        voice_block = source[voice_start:voice_end]
+
+        self.assertIn("await bot.download_file", voice_block)
+        self.assertIn("transcribe_voice(destination)", voice_block)
+        self.assertNotIn("transcribe_voice(bot, message)", voice_block)
+
+    def test_test_render_rewrite_generates_caption_once(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        rewrite_start = source.find("async def test_render_rewrite_callback")
+        rewrite_end = source.find("async def ", rewrite_start + 1)
+        rewrite_block = source[rewrite_start:rewrite_end]
+
+        self.assertIn("generate_instagram_caption", rewrite_block)
+        self.assertIn("test_render_caption", rewrite_block)
+
+    def test_test_render_style_persists_export_with_user_logo(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        style_start = source.find("async def test_render_style_callback")
+        style_end = source.find("async def ", style_start + 1)
+        if style_end == -1:
+            style_end = len(source)
+        style_block = source[style_start:style_end]
+
+        self.assertIn("_resolve_user_logo_for_message", style_block)
+        self.assertIn("_build_new_carousel_export", style_block)
+        self.assertIn("telegram_media_items", style_block)
+        self.assertNotIn('"chu ai"', style_block)
+
+        export_start = source.find("def _build_new_carousel_export")
+        export_end = source.find("@router.callback_query", export_start + 1)
+        export_block = source[export_start:export_end]
+        self.assertIn("build_instagram_export", export_block)
+        self.assertIn("save_export_package", export_block)
+
+    def test_help_mentions_new_carousel_mode(self):
+        source = (PROJECT_ROOT / "handlers" / "common.py").read_text(encoding="utf-8")
+        self.assertIn("🆕 Карусель NEW", source)
+        self.assertIn("async def cmd_help", source)
 
 
 if __name__ == "__main__":

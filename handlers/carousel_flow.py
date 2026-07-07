@@ -847,6 +847,49 @@ def _build_experimental_export_package(
     )
 
 
+def _build_new_carousel_export(
+    *,
+    chat_id: int,
+    source_text: str,
+    caption: str,
+    pngs: list[bytes],
+    carousel_plan: dict,
+    layout_specs: list[LayoutSpec],
+    style: "StylePreset",
+    rewrite_style: str,
+) -> tuple[str, str]:
+    """Persist a NEW-carousel export package. Sync; wrap in asyncio.to_thread."""
+
+    png_buffers = [BytesIO(png) for png in pngs]
+    slug_source = (source_text[:60] if source_text else "carousel") + f"-{style.id}"
+    export_dir = build_instagram_export(
+        png_buffers,
+        caption,
+        slug_source,
+        chat_id,
+        extra_metadata={
+            "render_mode": f"experimental-{style.id}",
+            "style_id": style.id,
+            "style_label": style.label,
+            "rewrite_style": rewrite_style,
+            "carousel_plan": carousel_plan,
+            "layout_specs": [spec.to_dict() for spec in layout_specs],
+        },
+    )
+    export_package = load_export_package(export_dir)
+    export_metadata = export_package.metadata
+    export_id = export_metadata["export_id"]
+    save_export_package(
+        export_id=export_id,
+        chat_id=chat_id,
+        export_dir=export_dir,
+        export_slug=export_metadata["export_slug"],
+        theme=carousel_plan.get("theme_hint"),
+        render_mode=f"experimental-{style.id}",
+    )
+    return export_id, export_dir
+
+
 @router.callback_query(F.data.startswith("carousel_exp_render:"))
 async def carousel_experimental_render(callback: types.CallbackQuery):
     await callback.answer()
@@ -913,11 +956,11 @@ async def carousel_experimental_render(callback: types.CallbackQuery):
 
 _TEST_RENDER_BUTTON_ROW = [
     [
-        InlineKeyboardButton(text="🧪 Dark+Teal", callback_data="test_render_style:dark_teal"),
-        InlineKeyboardButton(text="🧪 Paper+Orange", callback_data="test_render_style:paper_orange"),
+        InlineKeyboardButton(text="Dark+Teal", callback_data="test_render_style:dark_teal"),
+        InlineKeyboardButton(text="Paper+Orange", callback_data="test_render_style:paper_orange"),
     ],
     [
-        InlineKeyboardButton(text="🧪 White+Coral", callback_data="test_render_style:white_coral")
+        InlineKeyboardButton(text="White+Coral", callback_data="test_render_style:white_coral")
     ],
 ]
 
@@ -1004,8 +1047,9 @@ async def cmd_test_render(message: types.Message, state: FSMContext):
     await state.clear()
     await state.set_state(TestRenderFlow.waiting_for_text)
     await message.answer(
-        "🆕 Карусель NEW. Пришли текст для карусели (или голосовое сообщение).\n"
-        "Я покажу превью 3 стилей. Чтобы выйти, нажми /start."
+        "🆕 Карусель NEW. Пришли текст или голосовое сообщение.\n"
+        "Выбери режим текста и стиль. Стиль можно менять без повторной генерации.\n"
+        "Чтобы выйти, нажми /start."
     )
 
 
@@ -1013,7 +1057,7 @@ async def cmd_test_render(message: types.Message, state: FSMContext):
 async def test_render_text(message: types.Message, state: FSMContext):
     text = (message.text or "").strip()
     if not text:
-        await message.answer("🧪 Пришли непустой текст.")
+        await message.answer("Пришли непустой текст.")
         return
     if text.startswith("/"):
         # Allow the user to escape the FSM with /start.
@@ -1029,20 +1073,33 @@ async def test_render_text(message: types.Message, state: FSMContext):
     await state.update_data(test_render_text=text)
     await state.set_state(TestRenderFlow.waiting_for_rewrite)
     await message.answer(
-        "🧪 Выбери, как обработать текст:",
+        "Выбери, как обработать текст:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=_build_test_render_rewrite_row()),
     )
 
 
 @router.message(TestRenderFlow.waiting_for_text, F.voice)
 async def test_render_voice(message: types.Message, state: FSMContext, bot):
-    status = await message.answer("🧪 Расшифровываю голос…")
+    if message.voice.duration and message.voice.duration > 300:
+        await message.answer("⚠️ Голосовое сообщение слишком длинное! Максимум 5 минут.")
+        return
+
+    status = await message.answer("🎤 Расшифровываю голос…")
+    file_id = message.voice.file_id
+    file = await bot.get_file(file_id)
+    destination = f"voice_{file_id}.ogg"
+
     try:
-        text = await transcribe_voice(bot, message)
+        await bot.download_file(file.file_path, destination)
+        text = await transcribe_voice(destination)
     except Exception as exc:
         logging.exception("Voice transcription failed for test render")
         await status.edit_text(f"⚠️ Не удалось распознать голос: {exc}")
         return
+    finally:
+        if os.path.exists(destination):
+            os.remove(destination)
+
     if not text:
         await status.edit_text("⚠️ Пустая расшифровка. Пришли текст.")
         return
@@ -1055,7 +1112,7 @@ async def test_render_voice(message: types.Message, state: FSMContext, bot):
     await state.update_data(test_render_text=text)
     await state.set_state(TestRenderFlow.waiting_for_rewrite)
     await status.edit_text(
-        "🧪 Выбери, как обработать текст:",
+        "Выбери, как обработать текст:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=_build_test_render_rewrite_row()),
     )
 
@@ -1071,12 +1128,12 @@ async def test_render_rewrite_callback(callback: types.CallbackQuery, state: FSM
     data = await state.get_data()
     text = (data.get("test_render_text") or "").strip()
     if not text:
-        await callback.message.answer("🧪 Сначала пришли текст.")
+        await callback.message.answer("Сначала пришли текст.")
         await state.set_state(TestRenderFlow.waiting_for_text)
         return
 
     label = INSTA_REWRITE_LABELS[rewrite_style]
-    status = await callback.message.answer(f"🧪 Готовлю план в режиме «{label}»…")
+    status = await callback.message.answer(f"Готовлю план и подпись в режиме «{label}»…")
     try:
         layout_specs, carousel_plan = await _generate_test_render_plan(text, rewrite_style)
     except Exception as exc:
@@ -1089,14 +1146,21 @@ async def test_render_rewrite_callback(callback: types.CallbackQuery, state: FSM
         await status.edit_text("⚠️ Пустой план — попробуй другой текст или режим.")
         return
 
+    slides_content = [
+        {"title": slide.title, "body": slide.body}
+        for slide in carousel_plan.slides
+    ]
+    caption = await generate_instagram_caption(text, slides_content)
+
     await state.update_data(
         test_render_rewrite_style=rewrite_style,
+        test_render_caption=caption,
         layout_specs=[spec.to_dict() for spec in layout_specs],
         carousel_plan=asdict(carousel_plan),
     )
     await state.set_state(TestRenderFlow.waiting_for_style)
     await status.edit_text(
-        f"🧪 План готов ({len(layout_specs)} слайдов, «{label}»). Выбери стиль:",
+        f"План готов ({len(layout_specs)} слайдов, «{label}»). Выбери стиль:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=_TEST_RENDER_BUTTON_ROW),
     )
 
@@ -1113,7 +1177,7 @@ async def test_render_style_callback(callback: types.CallbackQuery, state: FSMCo
     data = await state.get_data()
     layout_specs_dicts = data.get("layout_specs") or []
     if not layout_specs_dicts:
-        await callback.message.answer("🧪 Сначала пришли текст.")
+        await callback.message.answer("Сначала пришли текст.")
         await state.set_state(TestRenderFlow.waiting_for_text)
         return
 
@@ -1128,12 +1192,18 @@ async def test_render_style_callback(callback: types.CallbackQuery, state: FSMCo
             await state.set_state(TestRenderFlow.waiting_for_text)
             return
 
-    status = await callback.message.answer(f"🧪 {style.label} — рендерю…")
+    source_text = (data.get("test_render_text") or "").strip()
+    caption = data.get("test_render_caption") or ""
+    rewrite_style = data.get("test_render_rewrite_style") or "concise"
+    carousel_plan = data.get("carousel_plan") or {}
+    user_logo = _resolve_user_logo_for_message(callback.message)
+
+    status = await callback.message.answer(f"{style.label} — рендерю…")
     try:
         pngs = await asyncio.to_thread(
             render_experimental_carousel,
             layout_specs,
-            "chu ai",
+            user_logo,
             "",
             "",
             style,
@@ -1147,28 +1217,77 @@ async def test_render_style_callback(callback: types.CallbackQuery, state: FSMCo
         await status.edit_text("⚠️ Нечего рендерить.")
         return
 
+    try:
+        export_id, export_dir = await asyncio.to_thread(
+            _build_new_carousel_export,
+            chat_id=callback.message.chat.id,
+            source_text=source_text,
+            caption=caption,
+            pngs=pngs,
+            carousel_plan=carousel_plan,
+            layout_specs=layout_specs,
+            style=style,
+            rewrite_style=rewrite_style,
+        )
+    except Exception as exc:
+        logging.exception("NEW carousel export failed for style %s", style_id)
+        await status.edit_text(f"⚠️ Не удалось сохранить экспорт: {exc}")
+        return
+
     media_group = [
         InputMediaPhoto(
             media=BufferedInputFile(
                 png,
-                filename=f"test_slide_{index+1:02d}.png",
+                filename=f"slide_{index+1:02d}.png",
             )
         )
         for index, png in enumerate(pngs)
     ]
-    await callback.message.answer_media_group(media_group)
-    rewrite_label = INSTA_REWRITE_LABELS.get(
-        data.get("test_render_rewrite_style") or "concise",
-        "Короче",
+    await status.delete()
+    sent_messages = await callback.message.answer_media_group(media_group)
+    telegram_media_items = []
+    for index, sent_message in enumerate(sent_messages, start=1):
+        if sent_message.photo:
+            telegram_media_items.append(
+                {
+                    "file_id": sent_message.photo[-1].file_id,
+                    "media_type": "photo",
+                    "order_index": index,
+                }
+            )
+    if telegram_media_items:
+        update_export_metadata(
+            export_dir,
+            {"telegram_media_items": telegram_media_items},
+        )
+
+    rewrite_label = INSTA_REWRITE_LABELS.get(rewrite_style, "Короче")
+    action_rows = []
+    if callback.from_user and callback.from_user.id == ADMIN_ID:
+        action_rows.append(
+            [
+                InlineKeyboardButton(text="📸 Опубликовать в Instagram", callback_data=f"instagram_publish:{export_id}"),
+                InlineKeyboardButton(text="🧵 Опубликовать в Threads", callback_data=f"threads_publish:{export_id}"),
+            ]
+        )
+        action_rows.append(
+            [InlineKeyboardButton(text="🛰 Advanced Meta plan", callback_data=f"meta_prepare:{export_id}")]
+        )
+    actions = InlineKeyboardMarkup(
+        inline_keyboard=[*action_rows, *_TEST_RENDER_BUTTON_ROW]
     )
+
+    caption_preview = caption if len(caption) <= 1200 else caption[:1200] + "..."
     await callback.message.answer(
-        f"🧪 {style.label}. Тестовый рендер. "
-        f"Текст: «{rewrite_label}». Прогоняй тот же текст через другие стили.",
-    )
-    # Re-show the style picker so the admin can keep iterating.
-    await status.edit_text(
-        f"✅ {style.label} готов. Выбери другой стиль или пришли новый текст.",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=_TEST_RENDER_BUTTON_ROW),
+        "✅ Карусель готова.\n\n"
+        f"Слайдов: {len(pngs)}\n"
+        f"Стиль: {style.label}\n"
+        f"Подача текста: {rewrite_label}\n"
+        f"Рендер: experimental-{style.id}\n"
+        f"Экспорт: {export_id}\n\n"
+        f"Подпись:\n{caption_preview}\n\n"
+        "Можно выбрать другой стиль — текст перегенерироваться не будет.",
+        reply_markup=actions,
     )
 
 
