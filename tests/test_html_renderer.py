@@ -190,6 +190,36 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertNotIn("background:#101820", html)
         self.assertIn("background-color:rgba(", html)
 
+    def test_build_slide_html_forces_readable_ai_text_on_external_background(self):
+        data_url = "data:image/png;base64,ZmFrZQ=="
+        plan = parse_carousel_plan(
+            {
+                "carousel": {"layout_style": "magazine", "theme_hint": "founder_brief"},
+                "slides": [
+                    {
+                        "index": 1,
+                        "role": "hook",
+                        "title": "Контраст",
+                        "body": "Текст не должен быть бледным.",
+                        "html_body": (
+                            '<section style="width:100%;height:100%;background:#f4f2ed;color:rgba(20,20,20,0.25);">'
+                            '<p style="color:rgba(20,20,20,0.25);opacity:0.25;">Бледный текст</p>'
+                            "</section>"
+                        ),
+                    }
+                ],
+            }
+        )
+        spec = build_instagram_layout_specs(plan, layout_style="magazine")[0]
+
+        html = build_slide_html(spec, logo_text="chu ai", custom_background_data_url=data_url)
+
+        self.assertIn(".ai-stage", html)
+        self.assertIn("color: #f8fafc !important", html)
+        self.assertIn("opacity: 1 !important", html)
+        self.assertIn("rgba(7, 10, 18, 0.56)", html)
+        self.assertIn("rgba(10, 14, 24, 0.76)", html)
+
     def test_build_slide_html_can_disable_ai_html_for_custom_background(self):
         data_url = "data:image/png;base64,ZmFrZQ=="
         plan = parse_carousel_plan(
@@ -224,6 +254,7 @@ class HtmlRendererTests(unittest.TestCase):
         self.assertIn("custom-bg", html)
         self.assertNotIn("AI broken slide", html)
         self.assertNotIn("background:#101820", html)
+        self.assertIn("rgba(7,10,18,0.58)", html)
 
     def test_build_slide_html_softens_ai_root_background_for_external_bg(self):
         data_url = "data:image/png;base64,ZmFrZQ=="

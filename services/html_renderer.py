@@ -19,20 +19,41 @@ def _background_treatment(background_intensity: str) -> dict[str, str]:
         "soft": {
             "opacity": "0.28",
             "filter": "contrast(1.04) saturate(0.84)",
-            "overlay": "linear-gradient(180deg, rgba(7, 10, 18, 0.10), rgba(7, 10, 18, 0.24))",
+            "overlay": "linear-gradient(180deg, rgba(7, 10, 18, 0.48), rgba(7, 10, 18, 0.62))",
         },
         "medium": {
             "opacity": "0.46",
             "filter": "contrast(1.08) saturate(0.92)",
-            "overlay": "linear-gradient(180deg, rgba(7, 10, 18, 0.12), rgba(7, 10, 18, 0.36))",
+            "overlay": "linear-gradient(180deg, rgba(7, 10, 18, 0.56), rgba(7, 10, 18, 0.70))",
         },
         "strong": {
             "opacity": "0.64",
             "filter": "contrast(1.12) saturate(1.02)",
-            "overlay": "linear-gradient(180deg, rgba(7, 10, 18, 0.10), rgba(7, 10, 18, 0.44))",
+            "overlay": "linear-gradient(180deg, rgba(7, 10, 18, 0.62), rgba(7, 10, 18, 0.76))",
         },
     }
     return treatments.get(background_intensity, treatments["medium"])
+
+
+def _external_background_text_guard_css(scope: str) -> str:
+    """Force readable text when a photo/preset background is present."""
+    return f"""
+    {scope}, {scope} h1, {scope} h2, {scope} h3, {scope} h4,
+    {scope} p, {scope} li, {scope} span, {scope} strong,
+    {scope} em, {scope} small, {scope} div {{
+      color: #f8fafc !important;
+      opacity: 1 !important;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.86), 0 0 2px rgba(0,0,0,0.96) !important;
+    }}
+    {scope} > * [style*="background"],
+    {scope} > * [style*="background-color"] {{
+      background: rgba(10, 14, 24, 0.76) !important;
+      border-color: rgba(255,255,255,0.22) !important;
+      box-shadow: 0 18px 44px rgba(0,0,0,0.28) !important;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }}
+    """
 
 
 def build_slide_html(
@@ -183,6 +204,7 @@ def _build_ai_slide_html(
         else ""
     )
     stage_background_css = "background: transparent !important;" if safe_bg else ""
+    text_guard_css = _external_background_text_guard_css(".ai-stage") if safe_bg else ""
     background_css = f"""
     .ai-custom-bg {{
       position: absolute;
@@ -223,6 +245,7 @@ def _build_ai_slide_html(
       gap: 24px;
       {stage_background_css}
     }}
+    {text_guard_css}
   </style>
 </head>
 <body>
@@ -385,10 +408,17 @@ def _build_magazine_slide_html(
     safe_bg = _safe_data_image_url(custom_background_data_url)
     has_custom_bg = bool(safe_bg)
 
-    # Палитра: тёмная или светлая в зависимости от темы.
-    # Если есть кастомный фон — выбираем контрастные цвета текста
-    # и НЕ накладываем непрозрачные заливки поверх.
-    if theme in {"research_mono", "founder_brief"}:
+    # With any external photo/preset background, readability wins over theme colors.
+    if has_custom_bg:
+        text_color = "#ffffff"
+        muted = "#f8fafc"
+        accent = "#fbbf24"
+        line = "rgba(255,255,255,0.55)"
+        tag_bg = "rgba(10,14,24,0.72)"
+        watermark = "rgba(255,255,255,0.18)"
+        text_shadow = "0 2px 14px rgba(0,0,0,0.86), 0 0 2px rgba(0,0,0,0.96)"
+        muted_shadow = "0 1px 12px rgba(0,0,0,0.78), 0 0 2px rgba(0,0,0,0.92)"
+    elif theme in {"research_mono", "founder_brief"}:
         text_color = "#111827"
         muted = "#1f2937"
         accent = "#b91c1c" if theme == "research_mono" else "#0369a1"
@@ -428,7 +458,7 @@ def _build_magazine_slide_html(
     }}
     .custom-bg-overlay {{
       position: absolute; inset: 0; z-index: 0;
-      background: {"linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.45) 100%)" if theme in {"research_mono","founder_brief"} else "linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.50) 100%)"};
+      background: linear-gradient(180deg, rgba(7,10,18,0.58) 0%, rgba(7,10,18,0.72) 100%);
     }}
     ''' if has_custom_bg else ""
     custom_bg_div = (
@@ -548,7 +578,7 @@ def _build_terminal_slide_html(
     }}
     .custom-bg-overlay {{
       position: absolute; inset: 0; z-index: 0;
-      background: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.30) 50%, rgba(0,0,0,0.55) 100%);
+      background: linear-gradient(180deg, rgba(7,10,18,0.62) 0%, rgba(7,10,18,0.54) 50%, rgba(7,10,18,0.74) 100%);
     }}
     ''' if has_custom_bg else ""
     custom_bg_div = (
@@ -649,7 +679,7 @@ def _build_poster_slide_html(
 
     if has_custom_bg:
         # Без сплошной заливки — кастомный фон виден
-        block_bg = "rgba(0,0,0,0.45)"
+        block_bg = "rgba(10,14,24,0.72)"
         body_bg = "transparent"
         text_color_eff = "#ffffff"
         block_text_color = "#ffffff"
@@ -667,7 +697,7 @@ def _build_poster_slide_html(
         else ""
     )
     custom_bg_overlay = (
-        '<div class="custom-bg-overlay" style="position:absolute; inset:0; z-index:0; background:linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.45) 100%);"></div>'
+        '<div class="custom-bg-overlay" style="position:absolute; inset:0; z-index:0; background:linear-gradient(180deg, rgba(7,10,18,0.58) 0%, rgba(7,10,18,0.74) 100%);"></div>'
         if has_custom_bg
         else ""
     )
@@ -752,9 +782,9 @@ def _build_carddeck_slide_html(
     if has_custom_bg:
         # Карточка полупрозрачная, без blur — фон виден чётко
         body_bg = "transparent"
-        card_bg = "rgba(15, 15, 26, 0.55)"
+        card_bg = "rgba(10, 14, 24, 0.76)"
         text_color = "#ffffff"
-        muted = "rgba(255,255,255,0.92)"
+        muted = "#f8fafc"
         border = "rgba(255,255,255,0.45)"
         text_shadow = "0 1px 10px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.95)"
         backdrop_filter = "none"
@@ -773,7 +803,7 @@ def _build_carddeck_slide_html(
         else ""
     )
     custom_bg_overlay = (
-        '<div class="custom-bg-overlay" style="position:absolute; inset:0; z-index:0; background:linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.35) 100%);"></div>'
+        '<div class="custom-bg-overlay" style="position:absolute; inset:0; z-index:0; background:linear-gradient(180deg, rgba(7,10,18,0.58) 0%, rgba(7,10,18,0.72) 100%);"></div>'
         if has_custom_bg
         else ""
     )
