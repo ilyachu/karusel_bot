@@ -859,24 +859,29 @@ def _build_new_carousel_export(
     layout_specs: list[LayoutSpec],
     style: "StylePreset",
     rewrite_style: str,
+    custom_background_data_url: str = "",
 ) -> tuple[str, str]:
     """Persist a NEW-carousel export package. Sync; wrap in asyncio.to_thread."""
 
     png_buffers = [BytesIO(png) for png in pngs]
     slug_source = (source_text[:60] if source_text else "carousel") + f"-{style.id}"
+    extra_metadata = {
+        "render_mode": f"experimental-{style.id}",
+        "style_id": style.id,
+        "style_label": style.label,
+        "rewrite_style": rewrite_style,
+        "carousel_plan": carousel_plan,
+        "layout_specs": [spec.to_dict() for spec in layout_specs],
+        "custom_background": bool(custom_background_data_url),
+    }
+    if custom_background_data_url:
+        extra_metadata["custom_background_data_url"] = custom_background_data_url
     export_dir = build_instagram_export(
         png_buffers,
         caption,
         slug_source,
         chat_id,
-        extra_metadata={
-            "render_mode": f"experimental-{style.id}",
-            "style_id": style.id,
-            "style_label": style.label,
-            "rewrite_style": rewrite_style,
-            "carousel_plan": carousel_plan,
-            "layout_specs": [spec.to_dict() for spec in layout_specs],
-        },
+        extra_metadata=extra_metadata,
     )
     export_package = load_export_package(export_dir)
     export_metadata = export_package.metadata
@@ -954,6 +959,32 @@ async def carousel_experimental_render(callback: types.CallbackQuery):
 # ---------------------------------------------------------------------------
 # Test-render entry point (admin-only mini-FSM)
 # ---------------------------------------------------------------------------
+
+
+def _test_render_background_label(data: dict) -> str:
+    if data.get("test_render_custom_bg_bytes"):
+        return "свой загружен"
+    return "авто из коллекции"
+
+
+def _build_test_render_background_row(data: dict | None = None) -> list[list[InlineKeyboardButton]]:
+    data = data or {}
+    has_custom = bool(data.get("test_render_custom_bg_bytes"))
+    upload_label = "✅ Свой фон выбран" if has_custom else "Загрузить свой фон"
+    rows = [[InlineKeyboardButton(text=upload_label, callback_data="test_render_upload_bg")]]
+    if has_custom:
+        rows.append([InlineKeyboardButton(text="Авто фоны", callback_data="test_render_bg_auto")])
+    return rows
+
+
+def _test_render_intro_text(data: dict | None = None) -> str:
+    data = data or {}
+    return (
+        "🆕 Карусель NEW. Пришли текст или голосовое сообщение.\n"
+        "Выбери режим текста и стиль. Стиль можно менять без повторной генерации.\n"
+        f"Фон: {_test_render_background_label(data)}.\n"
+        "Чтобы выйти, нажми /start."
+    )
 
 
 _TEST_RENDER_BUTTON_ROW = [
@@ -1054,10 +1085,103 @@ async def cmd_test_render(message: types.Message, state: FSMContext):
     await state.clear()
     await state.set_state(TestRenderFlow.waiting_for_text)
     await message.answer(
-        "🆕 Карусель NEW. Пришли текст или голосовое сообщение.\n"
-        "Выбери режим текста и стиль. Стиль можно менять без повторной генерации.\n"
-        "Чтобы выйти, нажми /start."
+        _test_render_intro_text(),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=_build_test_render_background_row(),
+        ),
     )
+
+
+@router.callback_query(TestRenderFlow.waiting_for_text, F.data == "test_render_upload_bg")
+async def test_render_upload_bg_callback(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(TestRenderFlow.waiting_for_background)
+    await callback.message.edit_text(
+        "📎 Пришлите одну картинку для фона всех слайдов.\n\n"
+        "Подойдёт фото или файл изображения. После загрузки вернёмся к вводу текста.",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Назад", callback_data="test_render_bg_back")]
+            ]
+        ),
+    )
+
+
+@router.callback_query(TestRenderFlow.waiting_for_background, F.data == "test_render_bg_back")
+async def test_render_bg_back_callback(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    data = await state.get_data()
+    await state.set_state(TestRenderFlow.waiting_for_text)
+    await callback.message.edit_text(
+        _test_render_intro_text(data),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=_build_test_render_background_row(data),
+        ),
+    )
+
+
+@router.callback_query(TestRenderFlow.waiting_for_text, F.data == "test_render_bg_auto")
+async def test_render_bg_auto_callback(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.update_data(
+        test_render_custom_bg_bytes=None,
+        test_render_custom_bg_mime_type="image/jpeg",
+    )
+    data = await state.get_data()
+    await callback.message.edit_text(
+        _test_render_intro_text(data),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=_build_test_render_background_row(data),
+        ),
+    )
+
+
+@router.message(TestRenderFlow.waiting_for_background, F.photo | F.document)
+async def test_render_custom_background(message: types.Message, state: FSMContext, bot):
+    if message.document:
+        if not message.document.mime_type or not message.document.mime_type.startswith("image/"):
+            await message.answer("⚠️ Нужна именно картинка: фото или файл изображения.")
+            return
+        file_id = message.document.file_id
+        file_size = message.document.file_size or 0
+        mime_type = message.document.mime_type
+    else:
+        photo = message.photo[-1]
+        file_id = photo.file_id
+        file_size = photo.file_size or 0
+        mime_type = "image/jpeg"
+
+    if file_size:
+        is_valid, error_msg = validate_file_size(file_size)
+        if not is_valid:
+            await message.answer(error_msg)
+            return
+
+    file = await bot.get_file(file_id)
+    file_bytes = BytesIO()
+    await bot.download_file(file.file_path, file_bytes)
+    file_bytes.seek(0)
+
+    await state.update_data(
+        test_render_custom_bg_bytes=file_bytes.getvalue(),
+        test_render_custom_bg_mime_type=mime_type,
+    )
+    data = await state.get_data()
+    await state.set_state(TestRenderFlow.waiting_for_text)
+    await message.answer(
+        "✅ Фон загружен.\n\n" + _test_render_intro_text(data),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=_build_test_render_background_row(data),
+        ),
+    )
+
+
+@router.message(TestRenderFlow.waiting_for_background, F.text)
+async def test_render_background_text_fallback(message: types.Message, state: FSMContext):
+    if message.text == "/start":
+        await state.clear()
+        return
+    await message.answer("Пришлите картинку для фона или нажмите «Назад».")
 
 
 @router.message(TestRenderFlow.waiting_for_text, F.text)
@@ -1204,14 +1328,20 @@ async def test_render_style_callback(callback: types.CallbackQuery, state: FSMCo
     rewrite_style = data.get("test_render_rewrite_style") or "concise"
     carousel_plan = data.get("carousel_plan") or {}
     user_logo = _resolve_user_logo_for_message(callback.message)
+    custom_bg_bytes = data.get("test_render_custom_bg_bytes")
+    custom_bg_mime = data.get("test_render_custom_bg_mime_type", "image/jpeg")
+    custom_background_data_url = (
+        image_bytes_to_data_url(custom_bg_bytes, custom_bg_mime) if custom_bg_bytes else ""
+    )
+    bg_label = _test_render_background_label(data)
 
-    status = await callback.message.answer(f"{style.label} — рендерю…")
+    status = await callback.message.answer(f"{style.label} — рендерю ({bg_label})…")
     try:
         pngs = await asyncio.to_thread(
             render_experimental_carousel,
             layout_specs,
             user_logo,
-            "",
+            custom_background_data_url,
             "",
             style,
         )
@@ -1235,6 +1365,7 @@ async def test_render_style_callback(callback: types.CallbackQuery, state: FSMCo
             layout_specs=layout_specs,
             style=style,
             rewrite_style=rewrite_style,
+            custom_background_data_url=custom_background_data_url,
         )
     except Exception as exc:
         logging.exception("NEW carousel export failed for style %s", style_id)
@@ -1289,6 +1420,7 @@ async def test_render_style_callback(callback: types.CallbackQuery, state: FSMCo
         "✅ Карусель готова.\n\n"
         f"Слайдов: {len(pngs)}\n"
         f"Стиль: {style.label}\n"
+        f"Фон: {bg_label}\n"
         f"Подача текста: {rewrite_label}\n"
         f"Рендер: experimental-{style.id}\n"
         f"Экспорт: {export_id}\n\n"

@@ -47,9 +47,35 @@ LIGHT_TEXT = "#f8fafc"
 PANEL_BG = "rgba(10, 14, 24, 0.76)"
 PANEL_BORDER = "rgba(255, 255, 255, 0.20)"
 
-# Overlay alpha for external backgrounds (top -> bottom gradient).
-OVERLAY_TOP = "rgba(7, 10, 18, 0.62)"
-OVERLAY_BOTTOM = "rgba(7, 10, 18, 0.76)"
+# Background treatment presets (aligned with html_renderer intensity levels).
+BACKGROUND_INTENSITIES = ("soft", "medium", "strong")
+
+BACKGROUND_TREATMENTS: dict[str, dict[str, str]] = {
+    "soft": {
+        "overlay_top": "rgba(7, 10, 18, 0.24)",
+        "overlay_bottom": "rgba(7, 10, 18, 0.38)",
+        "bg_filter": "contrast(1.06) saturate(1.16) brightness(1.06)",
+        "panel_bg_dark": "rgba(10, 14, 24, 0.58)",
+        "panel_bg_light": "rgba(255, 255, 255, 0.78)",
+    },
+    "medium": {
+        "overlay_top": "rgba(7, 10, 18, 0.40)",
+        "overlay_bottom": "rgba(7, 10, 18, 0.54)",
+        "bg_filter": "contrast(1.08) saturate(1.10) brightness(1.03)",
+        "panel_bg_dark": "rgba(10, 14, 24, 0.66)",
+        "panel_bg_light": "rgba(255, 255, 255, 0.84)",
+    },
+    "strong": {
+        "overlay_top": "rgba(7, 10, 18, 0.56)",
+        "overlay_bottom": "rgba(7, 10, 18, 0.70)",
+        "bg_filter": "contrast(1.10) saturate(1.04) brightness(1.00)",
+        "panel_bg_dark": "rgba(10, 14, 24, 0.76)",
+        "panel_bg_light": "rgba(255, 255, 255, 0.88)",
+    },
+}
+
+DEFAULT_PRESET_BACKGROUND_INTENSITY = "soft"
+DEFAULT_CUSTOM_BACKGROUND_INTENSITY = "medium"
 
 # Bullet-split rules for ``density="high" -> list``.
 MAX_BULLET_LENGTH = 80
@@ -442,6 +468,35 @@ def map_layout_spec_to_experimental_slide(
 # ---------------------------------------------------------------------------
 
 
+def _background_treatment(intensity: str) -> dict[str, str]:
+    normalized = (intensity or DEFAULT_PRESET_BACKGROUND_INTENSITY).strip().lower()
+    if normalized not in BACKGROUND_TREATMENTS:
+        normalized = DEFAULT_PRESET_BACKGROUND_INTENSITY
+    return BACKGROUND_TREATMENTS[normalized]
+
+
+def _resolve_background_intensity(
+    intensity: str,
+    *,
+    slide_type: str,
+    is_custom_background: bool,
+) -> str:
+    """Hook/quote slides need a slightly stronger overlay when text has no panel."""
+
+    base = (intensity or "").strip().lower()
+    if base not in BACKGROUND_INTENSITIES:
+        base = (
+            DEFAULT_CUSTOM_BACKGROUND_INTENSITY
+            if is_custom_background
+            else DEFAULT_PRESET_BACKGROUND_INTENSITY
+        )
+    if slide_type in {"hook", "quote"}:
+        order = list(BACKGROUND_INTENSITIES)
+        index = order.index(base)
+        return order[min(index + 1, len(order) - 1)]
+    return base
+
+
 def _title_font_size(title: str, slide_type: str) -> int:
     length = len((title or "").strip())
     if slide_type in {"quote", "hook"}:
@@ -581,6 +636,9 @@ def _shared_css(
     title_size: int = 72,
     body_size: int = 32,
     stat_size: int = 112,
+    background_intensity: str = DEFAULT_PRESET_BACKGROUND_INTENSITY,
+    slide_type: str = "body",
+    is_custom_background: bool = False,
 ) -> str:
     """Return CSS shared by every slide for the chosen style preset.
 
@@ -590,26 +648,24 @@ def _shared_css(
 
     is_light = _is_light_surface(style.surface_bg)
 
+    treatment = _background_treatment(
+        _resolve_background_intensity(
+            background_intensity,
+            slide_type=slide_type,
+            is_custom_background=is_custom_background,
+        )
+    )
+
     if custom_or_preset:
         # External background takes full-bleed priority. The surface_bg is
         # used only as a fallback color while the image loads.
         background_rule = (
             f"background: {style.surface_bg};\n"
-            f"  --external-bg: url('{custom_or_preset}');"
+            f"  --external-bg: url('{custom_or_preset}');\n"
+            f"  --external-bg-filter: {treatment['bg_filter']};\n"
+            f"  --overlay-top: {treatment['overlay_top']};\n"
+            f"  --overlay-bottom: {treatment['overlay_bottom']};"
         )
-        # For light surfaces, a dark overlay keeps text readable; for
-        # dark surfaces, a softer dark overlay is enough.
-        if is_light:
-            overlay_top = OVERLAY_TOP
-            overlay_bottom = OVERLAY_BOTTOM
-        else:
-            overlay_top = "rgba(7, 10, 18, 0.56)"
-            overlay_bottom = "rgba(7, 10, 18, 0.70)"
-        overlay_vars = (
-            f"  --overlay-top: {overlay_top};\n"
-            f"  --overlay-bottom: {overlay_bottom};"
-        )
-        background_rule = background_rule + "\n" + overlay_vars
     else:
         # No external background: use the surface background, plus any
         # background decoration as a second layer.
@@ -618,15 +674,14 @@ def _shared_css(
         else:
             bg_layers = style.surface_bg
         background_rule = f"background: {bg_layers};"
-        overlay_vars = ""
 
     # Determine panel colors depending on surface brightness.
     if is_light:
-        panel_bg = "rgba(255, 255, 255, 0.86)"
+        panel_bg = treatment["panel_bg_light"] if custom_or_preset else "rgba(255, 255, 255, 0.86)"
         panel_border = "rgba(10, 10, 10, 0.12)"
         shadow_color = "rgba(0, 0, 0, 0.10)"
     else:
-        panel_bg = PANEL_BG
+        panel_bg = treatment["panel_bg_dark"] if custom_or_preset else PANEL_BG
         panel_border = PANEL_BORDER
         shadow_color = "rgba(0, 0, 0, 0.28)"
 
@@ -665,6 +720,7 @@ def _shared_css(
       background-image: var(--external-bg);
       background-size: cover;
       background-position: center;
+      filter: var(--external-bg-filter, none);
       z-index: 0;
     }}
     .overlay {{
@@ -838,6 +894,8 @@ def _layout_html(
     body_size: int = 32,
     stat_size: int = 112,
     archetype: str = "",
+    background_intensity: str = DEFAULT_PRESET_BACKGROUND_INTENSITY,
+    is_custom_background: bool = False,
 ) -> str:
     """Wrap inner slide content in the standard 1080x1350 document."""
 
@@ -856,7 +914,7 @@ def _layout_html(
         "<head>\n"
         '<meta charset="utf-8">\n'
         f"{google_fonts}\n"
-        f"<style>{_shared_css(style, custom_or_preset, title_size=title_size, body_size=body_size, stat_size=stat_size)}</style>\n"
+        f"<style>{_shared_css(style, custom_or_preset, title_size=title_size, body_size=body_size, stat_size=stat_size, background_intensity=background_intensity, slide_type=slide_type, is_custom_background=is_custom_background)}</style>\n"
         "</head>\n"
         "<body>\n"
         f'<div class="slide {slide_type}{archetype_class}">\n'
@@ -969,6 +1027,7 @@ def build_experimental_slide_html(
     slide_index: int = 1,
     total_slides: int = 1,
     style: StylePreset | None = None,
+    background_intensity: str = DEFAULT_PRESET_BACKGROUND_INTENSITY,
 ) -> str:
     """Build a complete 1080x1350 HTML document for the slide.
 
@@ -988,7 +1047,19 @@ def build_experimental_slide_html(
     """
 
     active_style = style or DEFAULT_STYLE
-    custom_or_preset = (custom_background_data_url or preset_background_data_url or "").strip()
+    custom_bg = (custom_background_data_url or "").strip()
+    preset_bg = (preset_background_data_url or "").strip()
+    custom_or_preset = custom_bg or preset_bg
+    is_custom_background = bool(custom_bg)
+    resolved_intensity = (
+        background_intensity
+        if background_intensity in BACKGROUND_INTENSITIES
+        else (
+            DEFAULT_CUSTOM_BACKGROUND_INTENSITY
+            if is_custom_background
+            else DEFAULT_PRESET_BACKGROUND_INTENSITY
+        )
+    )
 
     if slide.type == "hook":
         inner = _hook_html(slide)
@@ -1025,6 +1096,8 @@ def build_experimental_slide_html(
         body_size=body_size,
         stat_size=stat_size,
         archetype=slide.archetype,
+        background_intensity=resolved_intensity,
+        is_custom_background=is_custom_background,
     )
 
 
@@ -1161,6 +1234,7 @@ def render_experimental_carousel(
     custom_background_data_url: str = "",
     preset_background_data_url: str = "",
     style: StylePreset | None = None,
+    background_intensity: str = DEFAULT_PRESET_BACKGROUND_INTENSITY,
 ) -> list[bytes]:
     """Render a list of ``LayoutSpec`` to a list of PNG bytes.
 
@@ -1193,6 +1267,11 @@ def render_experimental_carousel(
                 slide_preset = load_background_preset_data_url(preset.preset_id)
 
         slide = map_layout_spec_to_experimental_slide(spec, style=active_style)
+        slide_intensity = (
+            DEFAULT_CUSTOM_BACKGROUND_INTENSITY
+            if custom
+            else background_intensity
+        )
         html_content = build_experimental_slide_html(
             slide,
             logo_text=logo_text,
@@ -1201,6 +1280,7 @@ def render_experimental_carousel(
             slide_index=index,
             total_slides=total,
             style=active_style,
+            background_intensity=slide_intensity,
         )
         try:
             png = _render_with_playwright(html_content)

@@ -404,6 +404,20 @@ class FlowStructureTests(unittest.TestCase):
             TestRenderFlow.waiting_for_text.state,
             "TestRenderFlow:waiting_for_text",
         )
+        self.assertEqual(
+            TestRenderFlow.waiting_for_background.state,
+            "TestRenderFlow:waiting_for_background",
+        )
+
+    def test_test_render_supports_custom_background_upload(self):
+        source = (PROJECT_ROOT / "handlers" / "carousel_flow.py").read_text(encoding="utf-8")
+        for marker in (
+            "test_render_upload_bg",
+            "test_render_custom_background",
+            "test_render_custom_bg_bytes",
+            "test_render_bg_auto",
+        ):
+            self.assertIn(marker, source)
 
     def test_test_render_menu_button_uses_allowed_gate(self):
         """The '🆕 Карусель NEW' button must be added inside a gate

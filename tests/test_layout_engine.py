@@ -350,6 +350,30 @@ class LayoutEngineTests(unittest.TestCase):
         self.assertNotEqual(updated.slides[-1].title, DEFAULT_CTA_TITLE)
         self.assertIn("Сохрани", updated.slides[-1].title)
 
+    def test_comparison_grid_preserves_llm_supporting_cards(self):
+        plan = parse_carousel_plan(
+            {
+                "carousel": {"theme_hint": "research_mono", "layout_style": "terminal"},
+                "slides": [
+                    {
+                        "index": 1,
+                        "role": "example",
+                        "archetype": "comparison_grid",
+                        "title": "До и после",
+                        "body": "",
+                        "supporting_cards": [
+                            {"title": "До", "body": "один план"},
+                            {"title": "После", "body": "пять планов"},
+                        ],
+                        "density": "medium",
+                    }
+                ],
+            }
+        )
+        specs = build_instagram_layout_specs(plan, visual_mode="classic", layout_style="terminal")
+        self.assertEqual(len(specs[0].supporting_cards), 2)
+        self.assertEqual(specs[0].supporting_cards[0]["title"], "До")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -68,23 +68,32 @@ class ExperimentalSlideHtmlTests(unittest.TestCase):
         self.assertIn("#0a0a0a", html)
         self.assertIn("#f8fafc", html)
 
-    def test_custom_background_adds_dark_overlay_and_readable_text(self):
+    def test_custom_background_adds_overlay_and_saturation(self):
         data_url = "data:image/png;base64,ZmFrZQ=="
         html = build_experimental_slide_html(
             ExperimentalSlide(type="body", title="T", body="B"),
             custom_background_data_url=data_url,
+            background_intensity="medium",
         )
         self.assertIn("linear-gradient", html)
-        # Default dark surface uses a softer dark overlay; light surfaces
-        # get the stronger rgba(7,10,18,0.62->0.76) overlay.
-        self.assertIn("rgba(7, 10, 18, 0.56)", html)
-        self.assertIn("rgba(7, 10, 18, 0.70)", html)
+        self.assertIn("rgba(7, 10, 18, 0.40)", html)
+        self.assertIn("rgba(7, 10, 18, 0.54)", html)
+        self.assertIn("saturate(1.10)", html)
         self.assertIn("color: #f8fafc", html)
         self.assertIn("opacity: 1", html)
         self.assertIn("text-shadow", html)
         self.assertIn('class="external-bg"', html)
         self.assertIn('class="overlay"', html)
         self.assertIn(data_url, html)
+
+    def test_preset_background_uses_soft_intensity_by_default(self):
+        data_url = "data:image/jpeg;base64,ZmFrZQ=="
+        html = build_experimental_slide_html(
+            ExperimentalSlide(type="body", title="T", body="B"),
+            preset_background_data_url=data_url,
+        )
+        self.assertIn("rgba(7, 10, 18, 0.24)", html)
+        self.assertIn("saturate(1.16)", html)
 
     def test_no_ai_html_body_leaks_into_experimental_html(self):
         # ``map_layout_spec_to_experimental_slide`` must drop html_body.
@@ -440,32 +449,15 @@ class StyleSystemTests(unittest.TestCase):
         self.assertNotIn("<script>", html)
         self.assertIn('<span class="hl">&lt;script&gt;</span>', html)
 
-    def test_light_surface_with_external_bg_uses_dark_overlay(self):
+    def test_hook_slide_bumps_overlay_intensity(self):
         data_url = "data:image/png;base64,ZmFrZQ=="
-        for preset_id in ("paper_orange", "white_coral"):
-            preset = STYLE_PRESETS[preset_id]
-            html = build_experimental_slide_html(
-                ExperimentalSlide(type="body", title="T", body="B"),
-                style=preset,
-                custom_background_data_url=data_url,
-            )
-            self.assertIn(
-                "rgba(7, 10, 18, 0.62)",
-                html,
-                f"{preset_id}: light surface must use strong dark overlay",
-            )
-            self.assertIn("rgba(7, 10, 18, 0.76)", html)
-
-    def test_dark_surface_with_external_bg_keeps_overlay(self):
-        data_url = "data:image/png;base64,ZmFrZQ=="
-        preset = STYLE_PRESETS["dark_teal"]
         html = build_experimental_slide_html(
-            ExperimentalSlide(type="body", title="T", body="B"),
-            style=preset,
-            custom_background_data_url=data_url,
+            ExperimentalSlide(type="hook", title="Hook", body="Sub"),
+            preset_background_data_url=data_url,
+            background_intensity="soft",
         )
-        self.assertIn("rgba(7, 10, 18, 0.56)", html)
-        self.assertIn("rgba(7, 10, 18, 0.70)", html)
+        self.assertIn("rgba(7, 10, 18, 0.40)", html)
+        self.assertIn("rgba(7, 10, 18, 0.54)", html)
 
     def test_render_with_style_returns_pngs(self):
         specs = [_make_spec(role="hook", title="A", body="a")]

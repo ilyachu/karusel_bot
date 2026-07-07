@@ -378,7 +378,7 @@ def _build_classic_layout_specs(plan: CarouselPlan, layout_style: str = "magazin
         variant = _choose_variant(slide.role, slide.density, slide.index, total_slides)
         text_position = _choose_text_position(variant, slide.role)
         badge_text = theme_system["eyebrows"].get(slide.role, "Суть")
-        supporting_cards = _build_supporting_cards(slide.body, variant)
+        supporting_cards = _resolve_supporting_cards(slide, variant)
         specs.append(
             LayoutSpec(
                 slide_index=slide.index,
@@ -759,6 +759,19 @@ def _choose_text_position(variant: str, role: str) -> str:
     if role in {"context", "checklist"} or variant == "framework_grid":
         return "top"
     return "center"
+
+
+def _resolve_supporting_cards(slide: SlidePlanEntry, variant: str) -> list[dict]:
+    """Prefer LLM supporting_cards when they are required for the archetype."""
+
+    llm_cards = _normalize_supporting_cards(slide.supporting_cards)
+    archetype = slide.archetype or _infer_archetype(slide.role, variant)
+    if archetype == "comparison_grid" and len(llm_cards) >= 2:
+        return llm_cards
+    heuristic_cards = _build_supporting_cards(slide.body, variant)
+    if heuristic_cards:
+        return heuristic_cards
+    return llm_cards
 
 
 def _build_supporting_cards(body: str, variant: str) -> list[dict]:
